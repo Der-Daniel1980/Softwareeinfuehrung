@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Anträge{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-8">
+
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Anträge</h1>
+    {% set role_codes = user.role_codes() %}
+    {% if 'REQUESTER' in role_codes %}
+    <a href="/requests/new" class="inline-flex items-center gap-2 bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+      + Neuer Antrag
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-6">
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label for="search-input" class="block text-xs font-medium text-gray-600 mb-1">Suche</label>
+        <input
+          type="text"
+          id="search-input"
+          placeholder="Titel, Antragsteller…"
+          oninput="filterTable('search-input', 'requests-table')"
+          class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 w-56"
+        />
+      </div>
+      <div>
+        <label for="status-filter" class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+        <select id="status-filter" onchange="applyFilters()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <option value="">Alle Status</option>
+          <option value="DRAFT">Entwurf</option>
+          <option value="SUBMITTED">Eingereicht</option>
+          <option value="IN_REVIEW">In Prüfung</option>
+          <option value="CHANGES_REQUESTED">Rückfragen</option>
+          <option value="APPROVED">Freigegeben</option>
+          <option value="REJECTED">Abgelehnt</option>
+          <option value="PROVISIONALLY_APPROVED">Vorläufig freigegeben</option>
+        </select>
+      </div>
+      <div>
+        <label for="cat-filter" class="block text-xs font-medium text-gray-600 mb-1">Kategorie</label>
+        <select id="cat-filter" onchange="applyFilters()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <option value="">Alle Kategorien</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+        </select>
+      </div>
+      {% if 'REQUESTER' in role_codes %}
+      <div class="flex items-center gap-2 pb-0.5">
+        <input type="checkbox" id="mine-only" onchange="applyFilters()" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+        <label for="mine-only" class="text-sm text-gray-700">Nur meine</label>
+      </div>
+      {% endif %}
+      <button type="button" onclick="resetFilters()" class="text-sm text-gray-500 hover:text-gray-700 underline pb-0.5">
+        Zurücksetzen
+      </button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {% if requests %}
+    <table id="requests-table" class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Titel</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Antragsteller</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Kategorie</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Eingereicht</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Alter</th>
+          <th class="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for req in requests %}
+        {% set days = ((now() - req.submitted_at).days) if req.submitted_at and now is defined else '—' %}
+        <tr class="table-row-hover"
+            data-status="{{ req.status }}"
+            data-category="{{ req.system_category or '' }}"
+            data-owner="{{ req.requester_id }}">
+          <td class="px-4 py-3 text-sm font-medium text-gray-900 max-w-xs truncate">{{ req.title }}</td>
+          <td class="px-4 py-3 text-sm text-gray-600">{{ req.requester.name if req.requester else '—' }}</td>
+          <td class="px-4 py-3">
+            {% set status = req.status %}
+            {% include "components/status_badge.html" %}
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-600">{{ req.system_category or '—' }}</td>
+          <td class="px-4 py-3 text-sm text-gray-500">
+            {{ req.submitted_at.strftime('%d.%m.%Y') if req.submitted_at else '—' }}
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-500">{{ days }}{% if days != '—' %} T{% endif %}</td>
+          <td class="px-4 py-3 text-right whitespace-nowrap">
+            {% if req.status in ['DRAFT', 'CHANGES_REQUESTED'] and req.requester_id == user.id %}
+            <a href="/requests/{{ req.id }}" class="text-sm text-indigo-600 hover:underline font-medium mr-3">Bearbeiten</a>
+            {% endif %}
+            {% if req.status not in ['DRAFT'] %}
+            <a href="/requests/{{ req.id }}/review" class="text-sm text-gray-600 hover:underline">Prüfen</a>
+            {% endif %}
+            {% if req.status == 'DRAFT' and req.requester_id != user.id %}
+            <a href="/requests/{{ req.id }}" class="text-sm text-gray-600 hover:underline">Ansehen</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="p-12 text-center text-gray-400">
+      <div class="text-4xl mb-3">📋</div>
+      <p class="text-base font-medium text-gray-500">Keine Anträge gefunden</p>
+      {% if 'REQUESTER' in role_codes %}
+      <a href="/requests/new" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">Ersten Antrag erstellen →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function applyFilters() {
+  var statusVal = document.getElementById('status-filter').value.toLowerCase();
+  var catVal = document.getElementById('cat-filter').value.toLowerCase();
+  var searchVal = (document.getElementById('search-input').value || '').toLowerCase();
+  var mineOnly = document.getElementById('mine-only');
+  var myId = '{{ user.id }}';
+
+  document.querySelectorAll('#requests-table tbody tr').forEach(function(row) {
+    var status = (row.dataset.status || '').toLowerCase();
+    var cat = (row.dataset.category || '').toLowerCase();
+    var owner = row.dataset.owner || '';
+    var text = row.textContent.toLowerCase();
+
+    var ok = true;
+    if (statusVal && status !== statusVal) ok = false;
+    if (catVal && cat !== catVal) ok = false;
+    if (searchVal && !text.includes(searchVal)) ok = false;
+    if (mineOnly && mineOnly.checked && owner !== myId) ok = false;
+
+    row.style.display = ok ? '' : 'none';
+  });
+}
+
+function resetFilters() {
+  document.getElementById('status-filter').value = '';
+  document.getElementById('cat-filter').value = '';
+  document.getElementById('search-input').value = '';
+  var mineOnly = document.getElementById('mine-only');
+  if (mineOnly) mineOnly.checked = false;
+  applyFilters();
+}
+
+// Apply URL params on load
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var s = params.get('status');
+  if (s) document.getElementById('status-filter').value = s;
+  var mine = params.get('filter');
+  var mineOnly = document.getElementById('mine-only');
+  if (mine === 'mine' && mineOnly) mineOnly.checked = true;
+  applyFilters();
+})();
+</script>
+{% endblock %}

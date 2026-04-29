@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import enum
+
+
+class RoleCode(str, enum.Enum):
+    REQUESTER = "REQUESTER"
+    BETRIEBSRAT = "BETRIEBSRAT"
+    IT_SECURITY = "IT_SECURITY"
+    DATA_PROTECTION = "DATA_PROTECTION"
+    APP_MANAGER = "APP_MANAGER"
+    APP_OPERATION = "APP_OPERATION"
+    LICENSE_MGMT = "LICENSE_MGMT"
+    ADMIN = "ADMIN"
+    AUDITOR = "AUDITOR"
+
+
+class RequestStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    SUBMITTED = "SUBMITTED"
+    IN_REVIEW = "IN_REVIEW"
+    CHANGES_REQUESTED = "CHANGES_REQUESTED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    PROVISIONALLY_APPROVED = "PROVISIONALLY_APPROVED"
+
+
+class FieldStatus(str, enum.Enum):
+    IN_PROGRESS = "IN_PROGRESS"
+    IN_REVIEW = "IN_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+
+
+class Responsibility(str, enum.Enum):
+    INFO = "INFO"
+    APPROVAL = "APPROVAL"
+
+
+class SystemCategoryCode(str, enum.Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+
+
+class InputType(str, enum.Enum):
+    TEXT = "TEXT"
+    LONGTEXT = "LONGTEXT"
+    DATE = "DATE"
+    NUMBER = "NUMBER"
+    ENUM = "ENUM"
+    ENUM_MULTI = "ENUM_MULTI"
+    YESNO = "YESNO"
+    FILE = "FILE"
+
+
+class AttachmentPurpose(str, enum.Enum):
+    OPERATING_AGREEMENT = "OPERATING_AGREEMENT"
+    GENERIC = "GENERIC"
+
+
+class CatalogSource(str, enum.Enum):
+    FROM_REQUEST = "FROM_REQUEST"
+    IMPORTED = "IMPORTED"
+
+
+class RevisionKind(str, enum.Enum):
+    FIELD_CHANGE = "FIELD_CHANGE"
+    SUBMIT_SNAPSHOT = "SUBMIT_SNAPSHOT"
+
+
+class AuditAction(str, enum.Enum):
+    LOGIN = "LOGIN"
+    LOGOUT = "LOGOUT"
+    FIELD_UPDATED = "FIELD_UPDATED"
+    STATUS_CHANGED = "STATUS_CHANGED"
+    DECISION_SET = "DECISION_SET"
+    COMMENT_ADDED = "COMMENT_ADDED"
+    REMINDER_SENT = "REMINDER_SENT"
+    CATEGORY_CHANGED = "CATEGORY_CHANGED"
+    REQUEST_SUBMITTED = "REQUEST_SUBMITTED"
+    REQUEST_APPROVED = "REQUEST_APPROVED"
+    REQUEST_REJECTED = "REQUEST_REJECTED"
+    USER_CREATED = "USER_CREATED"
+    ATTACHMENT_UPLOADED = "ATTACHMENT_UPLOADED"

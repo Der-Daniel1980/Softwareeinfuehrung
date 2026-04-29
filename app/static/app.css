@@ -1,0 +1,136 @@
+/* SysIntro – custom utilities */
+
+/* Skip-to-content */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  background: #312e81;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  z-index: 9999;
+  text-decoration: none;
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* Sidebar section active state */
+.section-link.section-active {
+  background-color: #e0e7ff;
+  color: #3730a3;
+  font-weight: 600;
+  border-left: 3px solid #4f46e5;
+  padding-left: calc(0.75rem - 3px);
+}
+
+/* Sticky sidebar shadow */
+.sticky-sidebar {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.06);
+}
+
+/* Diff display */
+.diff-add {
+  background-color: #dcfce7;
+  color: #166534;
+  padding: 0.1rem 0.25rem;
+  border-radius: 2px;
+}
+.diff-remove {
+  background-color: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+  padding: 0.1rem 0.25rem;
+  border-radius: 2px;
+}
+
+/* Autosave indicator */
+.autosave-indicator {
+  font-size: 0.75rem;
+  transition: opacity 0.5s ease;
+}
+.autosave-indicator.saving {
+  color: #6b7280;
+  opacity: 1;
+}
+.autosave-indicator.saved {
+  color: #16a34a;
+  opacity: 1;
+}
+.autosave-indicator.error {
+  color: #dc2626;
+  opacity: 1;
+}
+.autosave-indicator.fade-out {
+  opacity: 0;
+}
+
+/* Section collapsible */
+.section-body {
+  transition: max-height 0.2s ease-out;
+}
+
+/* Field row */
+.field-row {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+.field-row:last-child {
+  border-bottom: none;
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* HTMX loading indicator */
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+/* Comment thread */
+.comment-thread {
+  border-left: 3px solid #e5e7eb;
+  padding-left: 1rem;
+}
+
+/* Wizard progress */
+.wizard-nav-item {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.wizard-nav-item:hover {
+  background-color: #f5f3ff;
+}
+
+/* Table hover */
+.table-row-hover:hover {
+  background-color: #f9fafb;
+}
+
+/* Mobile-friendly adjustments */
+@media (max-width: 768px) {
+  .sticky-sidebar {
+    position: static;
+    max-height: none;
+    box-shadow: none;
+  }
+}

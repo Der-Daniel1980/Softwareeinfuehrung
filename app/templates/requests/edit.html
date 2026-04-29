@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}{{ req.title }} – Bearbeiten{% endblock %}
+
+{% block content %}
+{% set role_codes = user.role_codes() %}
+{% set decisions = {} %}
+
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- Header bar -->
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6 bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4">
+    <div class="flex items-center gap-4 min-w-0">
+      <a href="/requests" class="text-sm text-indigo-500 hover:underline flex-shrink-0">← Anträge</a>
+      <div class="min-w-0">
+        <h1 class="text-xl font-bold text-gray-900 truncate">{{ req.title }}</h1>
+        <div class="flex items-center gap-3 mt-1">
+          {% set status = req.status %}
+          {% include "components/status_badge.html" %}
+          <span class="text-xs text-gray-400">Erstellt: {{ req.created_at.strftime('%d.%m.%Y') }}</span>
+          {% if req.submitted_at %}
+          <span class="text-xs text-gray-400">Eingereicht: {{ req.submitted_at.strftime('%d.%m.%Y') }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 flex-shrink-0">
+      <span id="save-status" class="text-xs text-gray-400"></span>
+      <span id="required-counter" class="text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded"></span>
+      {% if req.status in ['DRAFT', 'CHANGES_REQUESTED'] and req.requester_id == user.id %}
+      <button
+        id="submit-btn"
+        type="button"
+        disabled
+        title="Alle Pflichtfelder ausfüllen"
+        onclick="submitRequest({{ req.id }})"
+        class="bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
+      >
+        Einreichen
+      </button>
+      {% endif %}
+      <a href="/requests/{{ req.id }}/revisions" class="text-sm text-gray-500 hover:underline">Verlauf</a>
+    </div>
+  </div>
+
+  <div class="flex gap-6">
+
+    <!-- Left sidebar: section nav -->
+    <aside class="hidden lg:block w-56 flex-shrink-0">
+      <div class="sticky-sidebar bg-white rounded-xl border border-gray-200 shadow-sm p-3">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">Abschnitte</p>
+        <nav class="space-y-0.5">
+          {% for sec in sections %}
+          {% set sec_name = sec.section %}
+          <a
+            href="#section-{{ sec_name }}"
+            class="section-link wizard-nav-item flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-600 hover:text-gray-900"
+          >
+            <span>{{ sec_name }}</span>
+            <span id="check-{{ sec_name }}" class="text-xs text-green-500"></span>
+          </a>
+          {% endfor %}
+        </nav>
+      </div>
+    </aside>
+
+    <!-- Main form area -->
+    <div class="flex-1 min-w-0">
+
+      <!-- Category C: BV upload banner -->
+      {% if req.system_category == 'C' %}
+      <div class="mb-4 bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3">
+        <span class="text-amber-500 text-xl flex-shrink-0">⚠</span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-amber-800">Kategorie C: Betriebsvereinbarung erforderlich</p>
+          <p class="text-xs text-amber-700 mt-0.5 mb-2">Bitte laden Sie die Betriebsvereinbarung hoch:</p>
+          <input
+            type="file"
+            hx-post="/api/v1/requests/{{ req.id }}/attachments?purpose=OPERATING_AGREEMENT"
+            hx-encoding="multipart/form-data"
+            hx-trigger="change"
+            hx-swap="none"
+            hx-on::after-request="showFlash('success', 'Betriebsvereinbarung hochgeladen.')"
+            class="block text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200"
+          />
+          {% set bv_attachments = req.attachments | selectattr('purpose', 'equalto', 'OPERATING_AGREEMENT') | list %}
+          {% for att in bv_attachments %}
+          <div class="text-xs text-amber-700 mt-1">✓ {{ att.filename }}</div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Category D: Vier-Augen confirmation -->
+      {% if req.system_category == 'D' %}
+      <div class="mb-4 bg-red-50 border border-red-300 rounded-xl p-4">
+        <p class="text-sm font-semibold text-red-800 mb-2">Kategorie D: Vier-Augen-Bestätigung</p>
+        <p class="text-xs text-red-700 mb-3">Vor dem Einreichen müssen Application Owner und IT Application Owner bestätigen:</p>
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="confirm-appowner" class="rounded border-red-300 text-red-600" />
+            <span class="text-sm text-red-800">
+              Application Owner
+              {% if req.application_owner %}({{ req.application_owner.name }}){% endif %}
+              hat zugestimmt
+            </span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="confirm-itowner" class="rounded border-red-300 text-red-600" />
+            <span class="text-sm text-red-800">
+              IT Application Owner
+              {% if req.it_application_owner %}({{ req.it_application_owner.name }}){% endif %}
+              hat zugestimmt
+            </span>
+          </label>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Sections -->
+      {% for sec in sections %}
+      {% set section_name = sec.section %}
+      {% set fields = sec.fields %}
+      {% set mode = 'edit' %}
+      {% include "requests/_section.html" %}
+      {% endfor %}
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Toggle section collapse
+function toggleSection(sectionSafe) {
+  var body = document.getElementById('section-body-' + sectionSafe);
+  var chevron = document.getElementById('section-chevron-' + sectionSafe);
+  if (!body) return;
+  var isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  if (chevron) chevron.style.transform = isOpen ? 'rotate(-90deg)' : '';
+}
+
+// Multi-checkbox save
+function saveMultiCheck(fieldKey, reqId) {
+  var checkboxes = document.querySelectorAll('[name="' + fieldKey + '"]:checked');
+  var vals = Array.from(checkboxes).map(function(cb) { return cb.value; }).join(',');
+  fetch('/api/v1/requests/' + reqId + '/fields/' + fieldKey, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+    body: JSON.stringify({ value: vals }),
+  }).then(function(r) {
+    var fkeySafe = fieldKey.replace(/\./g, '_');
+    window.autosaveIndicator.show(fieldKey, r.ok ? 'saved' : 'error');
+  });
+}
+
+// Submit request
+function submitRequest(reqId) {
+  var catD = document.getElementById('confirm-appowner');
+  var catD2 = document.getElementById('confirm-itowner');
+  if (catD && catD2 && (!catD.checked || !catD2.checked)) {
+    showFlash('error', 'Bitte beide Vier-Augen-Bestätigungen aktivieren.');
+    return;
+  }
+  var payload = { category_d_confirmed_by: [] };
+  fetch('/api/v1/requests/' + reqId + '/submit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+    body: JSON.stringify(payload),
+  }).then(function(r) {
+    if (r.ok) {
+      window.location.href = '/requests?flash=Antrag+eingereicht';
+    } else {
+      r.json().then(function(d) {
+        showFlash('error', d.detail || 'Fehler beim Einreichen.');
+      });
+    }
+  });
+}
+
+// Init conditional fields and counter on load
+document.addEventListener('DOMContentLoaded', function() {
+  window.initConditionalFields();
+  window.updateRequiredCounter();
+  window.updateSectionCheckmarks();
+});
+</script>
+{% endblock %}

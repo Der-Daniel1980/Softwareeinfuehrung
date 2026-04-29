@@ -1,0 +1,32 @@
+[Unit]
+Description=SysIntro Demo Web App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sysintro
+Group=sysintro
+WorkingDirectory=/opt/sysintro/app
+EnvironmentFile=/opt/sysintro/.env
+ExecStart=/opt/sysintro/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --workers 1
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/sysintro/data /opt/sysintro/attachments /opt/sysintro/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

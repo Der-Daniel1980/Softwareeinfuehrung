@@ -1,0 +1,53 @@
+{# Expects: comments (list), req_id, field_key (optional), user #}
+<div class="comment-thread mt-3 space-y-3">
+  {% for comment in comments %}
+  {% if not comment.parent_id %}
+  <div class="bg-white border border-gray-200 rounded-lg p-3">
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-xs font-semibold text-gray-700">{{ comment.author.name if comment.author else '—' }}</span>
+      <span class="text-xs text-gray-400">{{ comment.created_at.strftime('%d.%m.%Y %H:%M') if comment.created_at else '' }}</span>
+    </div>
+    <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ comment.body }}</p>
+
+    {# Replies #}
+    {% for reply in comments if reply.parent_id == comment.id %}
+    <div class="mt-2 ml-4 border-l-2 border-indigo-100 pl-3">
+      <div class="flex items-center justify-between mb-0.5">
+        <span class="text-xs font-semibold text-gray-600">{{ reply.author.name if reply.author else '—' }}</span>
+        <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') if reply.created_at else '' }}</span>
+      </div>
+      <p class="text-sm text-gray-700 whitespace-pre-wrap">{{ reply.body }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {# New comment form #}
+  {% if req_id is defined %}
+  <form
+    hx-post="/api/v1/requests/{{ req_id }}/comments"
+    hx-target="closest .comment-thread"
+    hx-swap="outerHTML"
+    hx-on::after-request="this.reset()"
+    class="flex gap-2 mt-2"
+  >
+    <input type="hidden" name="field_key" value="{{ field_key or '' }}" />
+    <input type="hidden" name="role_id" value="" />
+    <input type="hidden" name="parent_id" value="" />
+    <textarea
+      name="body"
+      rows="2"
+      placeholder="Kommentar hinzufügen…"
+      required
+      class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+    ></textarea>
+    <button
+      type="submit"
+      class="self-end bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+    >
+      Senden
+    </button>
+  </form>
+  {% endif %}
+</div>

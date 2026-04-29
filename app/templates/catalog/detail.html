@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ entry.name }} – Katalog{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-8">
+
+  <div class="flex items-center gap-4 mb-6">
+    <a href="/catalog" class="text-sm text-indigo-500 hover:underline">← Systemkatalog</a>
+    <h1 class="text-2xl font-bold text-gray-900">{{ entry.name }}</h1>
+    {% if entry.status == 'ACTIVE' %}
+    <span class="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">Aktiv</span>
+    {% else %}
+    <span class="text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full font-medium">{{ entry.status }}</span>
+    {% endif %}
+  </div>
+
+  <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Hersteller</p>
+        <p class="text-sm text-gray-800">{{ entry.vendor or '—' }}</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Version</p>
+        <p class="text-sm text-gray-800">{{ entry.version or '—' }}</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Quelle</p>
+        <p class="text-sm text-gray-800">
+          {% if entry.source == 'FROM_REQUEST' %}Aus Antrag{% else %}Importiert{% endif %}
+        </p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Gültig ab</p>
+        <p class="text-sm text-gray-800">{{ entry.effective_from.strftime('%d.%m.%Y') if entry.effective_from else '—' }}</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Letzte Rezertifizierung</p>
+        <p class="text-sm text-gray-800">{{ entry.last_recertified_at.strftime('%d.%m.%Y') if entry.last_recertified_at else '—' }}</p>
+      </div>
+      {% if entry.request_id %}
+      <div>
+        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Verknüpfter Antrag</p>
+        <a href="/requests/{{ entry.request_id }}/review" class="text-sm text-indigo-600 hover:underline">
+          Antrag #{{ entry.request_id }} anzeigen →
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if entry.fields_json %}
+    <div>
+      <p class="text-xs font-semibold text-gray-500 uppercase mb-2">Weitere Felder (Snapshot)</p>
+      <pre class="text-xs bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-x-auto max-h-64">{{ entry.fields_json }}</pre>
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+{% endblock %}

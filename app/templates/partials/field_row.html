@@ -1,0 +1,286 @@
+{# Expects: field, mode ('edit'|'review'), req, user, field_values, decisions (review only), role_codes #}
+{% set fkey = field.key %}
+{% set fkey_safe = fkey | replace('.', '_') %}
+{% set current_val = field_values.get(fkey, '') or '' %}
+{% set is_cond = field.conditional_on_key %}
+
+<div
+  class="field-row {% if field.is_required %}required-field{% endif %} py-4"
+  id="fieldrow-{{ fkey_safe }}"
+  {% if is_cond %}
+  data-conditional-on="{{ field.conditional_on_key }}"
+  data-conditional-equals="{{ field.conditional_equals }}"
+  {% endif %}
+>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    <!-- Label + input column -->
+    <div>
+      <label for="input-{{ fkey_safe }}" class="block text-sm font-semibold text-gray-700 mb-1">
+        {{ field.label }}
+        {% if field.is_required %}
+        <span class="text-red-500 ml-0.5" aria-label="Pflichtfeld">*</span>
+        {% endif %}
+      </label>
+
+      {% if field.help_text %}
+      <details class="mb-2">
+        <summary class="text-xs text-indigo-500 cursor-pointer hover:underline select-none">Mehr…</summary>
+        <p class="text-xs text-gray-500 mt-1 leading-relaxed">{{ field.help_text }}</p>
+      </details>
+      {% endif %}
+
+      {% if mode == 'edit' %}
+        {# ── Edit mode inputs ── #}
+
+        {# Wrap in autosave container #}
+        <div class="autosave-field" data-field-key="{{ fkey }}">
+
+          {% if field.input_type == 'TEXT' %}
+          <input
+            type="text"
+            id="input-{{ fkey_safe }}"
+            name="{{ fkey }}"
+            value="{{ current_val }}"
+            data-field-key="{{ fkey }}"
+            hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+            hx-trigger="blur"
+            hx-vals='js:{value: event.target.value}'
+            hx-swap="none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+          />
+
+          {% elif field.input_type == 'LONGTEXT' %}
+          <textarea
+            id="input-{{ fkey_safe }}"
+            name="{{ fkey }}"
+            rows="4"
+            data-field-key="{{ fkey }}"
+            hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+            hx-trigger="blur"
+            hx-vals='js:{value: event.target.value}'
+            hx-swap="none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 resize-y"
+          >{{ current_val }}</textarea>
+
+          {% elif field.input_type == 'DATE' %}
+          <input
+            type="date"
+            id="input-{{ fkey_safe }}"
+            name="{{ fkey }}"
+            value="{{ current_val }}"
+            data-field-key="{{ fkey }}"
+            hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+            hx-trigger="blur, change"
+            hx-vals='js:{value: event.target.value}'
+            hx-swap="none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          />
+
+          {% elif field.input_type == 'NUMBER' %}
+          <input
+            type="number"
+            id="input-{{ fkey_safe }}"
+            name="{{ fkey }}"
+            value="{{ current_val }}"
+            data-field-key="{{ fkey }}"
+            hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+            hx-trigger="blur"
+            hx-vals='js:{value: event.target.value}'
+            hx-swap="none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          />
+
+          {% elif field.input_type == 'YESNO' %}
+          <div class="flex gap-4 mt-1" id="input-{{ fkey_safe }}">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="{{ fkey }}"
+                value="ja"
+                data-field-key="{{ fkey }}"
+                {% if current_val == 'ja' %}checked{% endif %}
+                hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+                hx-trigger="change"
+                hx-vals='{"value": "ja"}'
+                hx-swap="none"
+                class="text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-700">Ja</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="{{ fkey }}"
+                value="nein"
+                data-field-key="{{ fkey }}"
+                {% if current_val == 'nein' %}checked{% endif %}
+                hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+                hx-trigger="change"
+                hx-vals='{"value": "nein"}'
+                hx-swap="none"
+                class="text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-700">Nein</span>
+            </label>
+          </div>
+
+          {% elif field.input_type == 'ENUM' %}
+          {% set enum_opts = field.enum_values | from_json if field.enum_values else [] %}
+          <select
+            id="input-{{ fkey_safe }}"
+            name="{{ fkey }}"
+            data-field-key="{{ fkey }}"
+            hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+            hx-trigger="change"
+            hx-vals='js:{value: event.target.value}'
+            hx-swap="none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+          >
+            <option value="">— Bitte wählen —</option>
+            {% for opt in enum_opts %}
+            <option value="{{ opt }}" {% if current_val == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+
+          {% elif field.input_type == 'ENUM_MULTI' %}
+          {% set enum_opts = field.enum_values | from_json if field.enum_values else [] %}
+          {% set selected_vals = current_val.split(',') if current_val else [] %}
+          <div id="input-{{ fkey_safe }}" class="space-y-1 mt-1">
+            {% for opt in enum_opts %}
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                name="{{ fkey }}"
+                value="{{ opt }}"
+                data-field-key="{{ fkey }}"
+                {% if opt in selected_vals %}checked{% endif %}
+                onchange="saveMultiCheck('{{ fkey }}', '{{ req.id }}')"
+                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-700">{{ opt }}</span>
+            </label>
+            {% endfor %}
+          </div>
+
+          {% elif field.input_type == 'FILE' %}
+          <div class="mt-1">
+            <input
+              type="file"
+              id="input-{{ fkey_safe }}"
+              data-field-key="{{ fkey }}"
+              hx-post="/api/v1/requests/{{ req.id }}/attachments?purpose=GENERIC"
+              hx-encoding="multipart/form-data"
+              hx-trigger="change"
+              hx-swap="none"
+              class="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+            />
+            {% set attachments = req.attachments | selectattr('purpose', 'equalto', 'GENERIC') | list %}
+            {% for att in attachments %}
+            <div class="text-xs text-gray-500 mt-1">📎 {{ att.filename }}</div>
+            {% endfor %}
+          </div>
+
+          {% endif %}
+
+          <!-- Autosave indicator -->
+          <span
+            id="autosave-{{ fkey_safe }}"
+            class="autosave-indicator text-xs mt-1 block h-4"
+            aria-live="polite"
+          ></span>
+
+        </div>{# end autosave-field #}
+
+      {% else %}
+        {# ── Review mode: read-only value ── #}
+        <div class="text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 min-h-[2.5rem] whitespace-pre-wrap">
+          {% if current_val %}{{ current_val }}{% else %}<span class="text-gray-400 italic">Nicht ausgefüllt</span>{% endif %}
+        </div>
+      {% endif %}
+    </div>{# end left column #}
+
+    <!-- Right column: decisions + comments (review mode) or status chips (edit mode) -->
+    <div class="space-y-3">
+
+      {% if mode == 'review' %}
+        {# Show decision controls for viewer's F-roles #}
+        {% for resp in field.responsibilities %}
+          {% if resp.kind == 'APPROVAL' and resp.role.code in role_codes %}
+          {% set dec_key = (fkey, resp.role_id) %}
+          {% set dec = decisions.get(dec_key) %}
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-3" id="decision-{{ fkey_safe }}-{{ resp.role_id }}">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-xs font-semibold text-gray-500 uppercase">{{ resp.role.code }}</span>
+              {% if dec %}
+                {% set status = dec.status %}
+                {% include "components/status_badge.html" %}
+              {% else %}
+                <span class="badge bg-gray-100 text-gray-500">OFFEN</span>
+              {% endif %}
+            </div>
+            <div
+              id="decision-form-{{ fkey_safe }}-{{ resp.role_id }}"
+              hx-target="#decision-{{ fkey_safe }}-{{ resp.role_id }}"
+              hx-swap="outerHTML"
+            >
+              <select
+                onchange="toggleDecisionComment(this, '{{ fkey_safe }}-{{ resp.role_id }}')"
+                id="dec-sel-{{ fkey_safe }}-{{ resp.role_id }}"
+                class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-2"
+              >
+                <option value="">— Entscheidung wählen —</option>
+                <option value="APPROVED" {% if dec and dec.status == 'APPROVED' %}selected{% endif %}>Freigegeben</option>
+                <option value="REJECTED" {% if dec and dec.status == 'REJECTED' %}selected{% endif %}>Abgelehnt</option>
+                <option value="IN_REVIEW" {% if dec and dec.status == 'IN_REVIEW' %}selected{% endif %}>In Prüfung</option>
+              </select>
+              <div id="comment-box-{{ fkey_safe }}-{{ resp.role_id }}" class="hidden mt-1">
+                <textarea
+                  id="dec-comment-{{ fkey_safe }}-{{ resp.role_id }}"
+                  placeholder="Begründung (Pflicht bei Ablehnung)"
+                  rows="2"
+                  class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+                ></textarea>
+              </div>
+              <button
+                type="button"
+                onclick="submitDecision('{{ req.id }}', '{{ fkey }}', {{ resp.role_id }}, '{{ fkey_safe }}-{{ resp.role_id }}')"
+                class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium py-1.5 px-3 rounded transition-colors"
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+
+        {# Info-only role chips #}
+        {% for resp in field.responsibilities %}
+          {% if resp.kind == 'INFO' and resp.role.code in role_codes %}
+          <div class="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded px-2 py-1">
+            Info: <span class="font-medium text-gray-600">{{ resp.role.code }}</span>
+          </div>
+          {% endif %}
+        {% endfor %}
+
+      {% else %}
+        {# Edit mode: show existing decision chips from all roles #}
+        {% for resp in field.responsibilities if resp.kind == 'APPROVAL' %}
+        {% set dec_key = (fkey, resp.role_id) %}
+        {% set dec = decisions.get(dec_key) if decisions is defined else None %}
+        {% if dec %}
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-gray-500">{{ resp.role.code }}:</span>
+          {% set status = dec.status %}
+          {% include "components/status_badge.html" %}
+          {% if dec.decider %}
+          <span class="text-gray-400">{{ dec.decider.name }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% endfor %}
+      {% endif %}
+
+    </div>{# end right column #}
+  </div>
+</div>

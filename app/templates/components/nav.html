@@ -1,0 +1,58 @@
+<nav class="bg-indigo-900 text-white shadow-lg">
+  <div class="max-w-7xl mx-auto px-4">
+    <div class="flex items-center justify-between h-14">
+
+      <!-- Logo + main links -->
+      <div class="flex items-center gap-6">
+        <a href="/" class="font-bold text-xl tracking-tight text-white hover:text-indigo-200 transition-colors">
+          SysIntro
+        </a>
+        <div class="hidden md:flex items-center gap-1">
+          <a href="/" class="px-3 py-2 rounded text-sm text-indigo-200 hover:text-white hover:bg-indigo-800 transition-colors">
+            Dashboard
+          </a>
+          <a href="/requests" class="px-3 py-2 rounded text-sm text-indigo-200 hover:text-white hover:bg-indigo-800 transition-colors">
+            Anträge
+          </a>
+          <a href="/catalog" class="px-3 py-2 rounded text-sm text-indigo-200 hover:text-white hover:bg-indigo-800 transition-colors">
+            Systemkatalog
+          </a>
+          {% set role_codes = user.role_codes() %}
+          {% if 'ADMIN' in role_codes or 'AUDITOR' in role_codes %}
+          <a href="/admin/audit" class="px-3 py-2 rounded text-sm text-indigo-200 hover:text-white hover:bg-indigo-800 transition-colors">
+            Auditlog
+          </a>
+          {% endif %}
+          {% if 'ADMIN' in role_codes %}
+          <a href="/admin/users" class="px-3 py-2 rounded text-sm text-indigo-200 hover:text-white hover:bg-indigo-800 transition-colors">
+            Benutzer
+          </a>
+          {% endif %}
+          {% if 'REQUESTER' in role_codes %}
+          <a href="/requests/new" class="px-3 py-2 rounded text-sm bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors">
+            + Neuer Antrag
+          </a>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- User chip + logout -->
+      <div class="flex items-center gap-3">
+        <div class="hidden sm:flex flex-col items-end">
+          <span class="text-sm font-medium text-white">{{ user.name }}</span>
+          <div class="flex flex-wrap gap-1 justify-end mt-0.5">
+            {% for role in user.roles %}
+            <span class="text-xs bg-indigo-700 text-indigo-100 px-1.5 py-0.5 rounded">{{ role.code }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        <form action="/logout" method="post" class="inline">
+          <button type="submit" class="text-sm text-indigo-300 hover:text-white hover:bg-indigo-800 px-3 py-1.5 rounded transition-colors" aria-label="Abmelden">
+            Abmelden
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</nav>

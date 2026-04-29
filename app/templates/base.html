@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-gray-50">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}SysIntro{% endblock %} – amedes</title>
+
+  <!-- CSRF token from cookie (double-submit) -->
+  <script>
+    (function() {
+      function getCookie(name) {
+        var match = document.cookie.match(new RegExp('(?:^|;)\\s*' + name + '=([^;]*)'));
+        return match ? decodeURIComponent(match[1]) : '';
+      }
+      var token = getCookie('csrf_token');
+      var meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = token;
+      document.head.appendChild(meta);
+    })();
+  </script>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/app.css" />
+
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full flex flex-col" hx-ext="head-support">
+
+  <!-- Skip to content -->
+  <a href="#main-content" class="skip-link">Zum Inhalt springen</a>
+
+  <!-- Navigation -->
+  {% if user is defined and user %}
+    {% include "components/nav.html" %}
+  {% endif %}
+
+  <!-- Flash messages -->
+  <div id="flash-container" class="max-w-7xl mx-auto w-full px-4 mt-2">
+    {% include "components/flash.html" %}
+  </div>
+
+  <!-- Main content -->
+  <main id="main-content" class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-200 mt-auto py-4">
+    <div class="max-w-7xl mx-auto px-4 text-center text-sm text-gray-400">
+      SysIntro &mdash; amedes Demo &mdash; {{ now().year }}
+    </div>
+  </footer>
+
+  <!-- App JS -->
+  <script src="/static/app.js"></script>
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

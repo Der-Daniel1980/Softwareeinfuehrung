@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Auditlog{% endblock %}
+
+{% block content %}
+{% set role_codes = user.role_codes() %}
+
+<div class="max-w-7xl mx-auto px-4 py-8">
+
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Auditlog</h1>
+      <p class="text-sm text-gray-500 mt-1">Letzte 200 Ereignisse (neueste zuerst)</p>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+    <div class="flex flex-wrap gap-3 items-end">
+      <div>
+        <label for="audit-search" class="block text-xs font-medium text-gray-600 mb-1">Suche</label>
+        <input
+          type="text"
+          id="audit-search"
+          placeholder="Aktion, Benutzer, Ziel…"
+          oninput="filterTable('audit-search', 'audit-table')"
+          class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 w-64"
+        />
+      </div>
+      <div>
+        <label for="action-filter" class="block text-xs font-medium text-gray-600 mb-1">Aktion</label>
+        <select id="action-filter" onchange="filterAudit()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+          <option value="">Alle Aktionen</option>
+          <option value="LOGIN">LOGIN</option>
+          <option value="LOGOUT">LOGOUT</option>
+          <option value="FIELD_UPDATED">FIELD_UPDATED</option>
+          <option value="STATUS_CHANGED">STATUS_CHANGED</option>
+          <option value="DECISION_SET">DECISION_SET</option>
+          <option value="COMMENT_ADDED">COMMENT_ADDED</option>
+          <option value="REMINDER_SENT">REMINDER_SENT</option>
+          <option value="REQUEST_SUBMITTED">REQUEST_SUBMITTED</option>
+          <option value="REQUEST_APPROVED">REQUEST_APPROVED</option>
+          <option value="REQUEST_REJECTED">REQUEST_REJECTED</option>
+          <option value="USER_CREATED">USER_CREATED</option>
+          <option value="ATTACHMENT_UPLOADED">ATTACHMENT_UPLOADED</option>
+        </select>
+      </div>
+      <button type="button" onclick="resetAuditFilters()" class="text-sm text-gray-500 hover:text-gray-700 underline pb-0.5">
+        Zurücksetzen
+      </button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    {% if logs %}
+    <table id="audit-table" class="min-w-full divide-y divide-gray-200 text-sm">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Zeitpunkt</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Aktor</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Rolle</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Aktion</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Ziel</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ID</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for log in logs %}
+        <tr class="table-row-hover" data-action="{{ log.action }}">
+          <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+            {{ log.occurred_at.strftime('%d.%m.%Y %H:%M:%S') if log.occurred_at else '—' }}
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-800">
+            {{ log.actor.name if log.actor else (log.actor_id | string if log.actor_id else '—') }}
+          </td>
+          <td class="px-4 py-3">
+            {% if log.actor_role_code %}
+            <span class="text-xs bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium">{{ log.actor_role_code }}</span>
+            {% else %}
+            <span class="text-gray-400">—</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3">
+            {% set action_colors = {
+              'LOGIN': 'bg-green-100 text-green-700',
+              'LOGOUT': 'bg-gray-100 text-gray-600',
+              'FIELD_UPDATED': 'bg-blue-100 text-blue-700',
+              'STATUS_CHANGED': 'bg-purple-100 text-purple-700',
+              'DECISION_SET': 'bg-indigo-100 text-indigo-700',
+              'COMMENT_ADDED': 'bg-yellow-100 text-yellow-700',
+              'REQUEST_SUBMITTED': 'bg-teal-100 text-teal-700',
+              'REQUEST_APPROVED': 'bg-green-100 text-green-700',
+              'REQUEST_REJECTED': 'bg-red-100 text-red-700',
+              'REMINDER_SENT': 'bg-amber-100 text-amber-700',
+              'USER_CREATED': 'bg-violet-100 text-violet-700',
+              'ATTACHMENT_UPLOADED': 'bg-orange-100 text-orange-700',
+            } %}
+            <span class="text-xs font-medium px-2 py-0.5 rounded {{ action_colors.get(log.action, 'bg-gray-100 text-gray-600') }}">
+              {{ log.action }}
+            </span>
+          </td>
+          <td class="px-4 py-3 text-sm text-gray-600">{{ log.target_type or '—' }}</td>
+          <td class="px-4 py-3 text-sm text-gray-500 font-mono">{{ log.target_id or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="p-12 text-center text-gray-400">
+      <div class="text-4xl mb-3">📋</div>
+      <p class="text-base font-medium text-gray-500">Noch keine Auditeinträge vorhanden</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function filterAudit() {
+  var actionVal = document.getElementById('action-filter').value;
+  var searchVal = (document.getElementById('audit-search').value || '').toLowerCase();
+  document.querySelectorAll('#audit-table tbody tr').forEach(function(row) {
+    var action = row.dataset.action || '';
+    var text = row.textContent.toLowerCase();
+    var ok = true;
+    if (actionVal && action !== actionVal) ok = false;
+    if (searchVal && !text.includes(searchVal)) ok = false;
+    row.style.display = ok ? '' : 'none';
+  });
+}
+
+function resetAuditFilters() {
+  document.getElementById('action-filter').value = '';
+  document.getElementById('audit-search').value = '';
+  filterAudit();
+}
+
+document.getElementById('audit-search').addEventListener('input', filterAudit);
+</script>
+{% endblock %}
