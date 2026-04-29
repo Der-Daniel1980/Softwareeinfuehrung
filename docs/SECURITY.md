@@ -121,6 +121,16 @@ LockPersonality=true
 - [ ] **DSGVO-Verarbeitungsverzeichnis** anlegen
 - [ ] **Penetrationstest** durchführen (Spec Phase 4)
 
+## Bewusste Design-Entscheidung: Vollständige Request-Sicht für Reviewer
+
+**Verhalten:** Sobald ein Reviewer (Rolle BR / IT-Sec / DSB / App-Mgr / App-Op / Lic-Mgmt) **irgendeine** Verantwortung (I oder F) auf einem Antrag hat, sieht diese Person den **vollständigen** Antrag inklusive aller Felder — auch derer, für die seine Rolle weder INFO noch APPROVAL gesetzt ist.
+
+**Begründung:** Das spiegelt die Excel-Vorlage, in der jeder Freigeber das Gesamtformular zur Kontextprüfung sah. Eine isolierte Sicht nur auf eigene Felder würde sinnvolle Freigaben erschweren (z. B. kann der Lizenzmanager den Lizenzbedarf nur einschätzen, wenn er auch Standorte und Mitarbeiterzahl sieht).
+
+**Implikation:** Wenn ein Antrag wirklich sensitive Daten enthält (z. B. Krankenakten-Schemas in Frage 6.x), sollten Antragsteller nur das technisch nötige Minimum eintragen. Vertrauliche Anhänge sollten **nicht** über das Anhang-Upload, sondern separat abgelegt werden (Verweis im Feld auf eine externe ACL-geschützte Quelle).
+
+**Migration zu Field-Level-ACL:** falls erforderlich, in `app/api/requests.py::_to_read()` `field_values` pro Viewer-Rolle filtern (`responsibility.fields_visible_to(role) → set[str]`). Dies bricht den aktuellen Workflow nicht, beschränkt aber die Sicht.
+
 ## Bekannte Demo-Limitierungen
 
 | Limitierung | Auswirkung | Migration-Pfad |

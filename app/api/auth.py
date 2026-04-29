@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.auth_deps import get_current_user
+from app.core.csrf import CSRF_COOKIE_NAME, generate_csrf_token
 from app.core.security import create_access_token, verify_password
 from app.database import get_db
 from app.models import User
@@ -58,6 +59,15 @@ async def login(
         secure=bool(settings.SECURE_COOKIES),
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+    # Issue CSRF token (readable by JS, sent back as X-CSRF-Token header)
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=generate_csrf_token(),
+        httponly=False,
+        samesite="lax",
+        secure=bool(settings.SECURE_COOKIES),
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
     return {"ok": True}
 
 
@@ -70,6 +80,7 @@ async def logout(
     audit.log(db, user, AuditAction.LOGOUT.value, "User", str(user.id))
     db.commit()
     response.delete_cookie("access_token")
+    response.delete_cookie(CSRF_COOKIE_NAME)
     return {"ok": True}
 
 

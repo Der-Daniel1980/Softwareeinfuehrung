@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.auth_deps import require_admin
+from app.core.csrf import verify_api_csrf
 from app.database import get_db
 from app.models import Reminder
 from app.services import reminders as reminder_svc
@@ -30,7 +31,7 @@ def list_reminders(
     ]
 
 
-@router.post("/admin/run-reminder-scan")
+@router.post("/admin/run-reminder-scan", dependencies=[Depends(verify_api_csrf)])
 def run_reminder_scan(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),

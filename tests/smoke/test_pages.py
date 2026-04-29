@@ -2,16 +2,13 @@
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from tests.conftest import as_role, client as _client_fixture  # noqa: F401
-
+from tests.conftest import as_role  # noqa: F401
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
 def client():
-    from tests.conftest import client as _c
     # Re-use the session-scoped client from conftest
     import tests.conftest as conf
     return conf.TestClient if hasattr(conf, "TestClient") else _get_client()
@@ -19,9 +16,10 @@ def client():
 
 def _get_client():
     from fastapi.testclient import TestClient as TC
+
+    from app.database import get_db
     from app.main import app
     from tests.conftest import override_get_db
-    from app.database import get_db
     app.dependency_overrides[get_db] = override_get_db
     return TC(app, raise_server_exceptions=True)
 
@@ -42,12 +40,13 @@ def login(email: str, password: str = "demo1234") -> None:
 
 def test_unauthed_root_returns_401_or_redirect():
     # Fresh client with no cookies — backend raises 401 (no redirect configured)
-    from fastapi.testclient import TestClient
+    from fastapi.testclient import TestClient as TC
+
+    from app.database import get_db
     from app.main import app
     from tests.conftest import override_get_db
-    from app.database import get_db
     app.dependency_overrides[get_db] = override_get_db
-    c = TestClient(app, raise_server_exceptions=False, follow_redirects=False)
+    c = TC(app, raise_server_exceptions=False, follow_redirects=False)
     resp = c.get("/")
     # Backend returns 401 for unauthenticated web requests
     assert resp.status_code in (401, 302, 303, 307), (

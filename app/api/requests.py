@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.auth_deps import get_current_user
+from app.core.csrf import verify_api_csrf
 from app.database import get_db
 from app.models import ApplicationRequest, Attachment, FieldValue, User
 from app.models.enums import AuditAction
@@ -40,7 +41,8 @@ def list_requests(
     ]
 
 
-@router.post("", response_model=RequestRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RequestRead, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(verify_api_csrf)])
 def create_request(
     body: RequestCreate,
     db: Session = Depends(get_db),
@@ -70,7 +72,8 @@ def get_request(
     return _to_read(req)
 
 
-@router.patch("/{req_id}", response_model=RequestRead)
+@router.patch("/{req_id}", response_model=RequestRead,
+              dependencies=[Depends(verify_api_csrf)])
 def patch_request(
     req_id: int,
     body: RequestPatch,
@@ -89,7 +92,8 @@ def patch_request(
     return _to_read(req)
 
 
-@router.patch("/{req_id}/fields/{key}", response_model=RequestRead)
+@router.patch("/{req_id}/fields/{key}", response_model=RequestRead,
+              dependencies=[Depends(verify_api_csrf)])
 def patch_field(
     req_id: int,
     key: str,
@@ -134,7 +138,8 @@ def patch_field(
     return _to_read(req)
 
 
-@router.post("/{req_id}/submit", response_model=RequestRead)
+@router.post("/{req_id}/submit", response_model=RequestRead,
+             dependencies=[Depends(verify_api_csrf)])
 def submit_request(
     req_id: int,
     body: SubmitRequest,
@@ -151,7 +156,8 @@ def submit_request(
     return _to_read(req)
 
 
-@router.post("/{req_id}/resubmit", response_model=RequestRead)
+@router.post("/{req_id}/resubmit", response_model=RequestRead,
+             dependencies=[Depends(verify_api_csrf)])
 def resubmit_request(
     req_id: int,
     body: ResubmitRequest,
@@ -168,7 +174,25 @@ def resubmit_request(
     return _to_read(req)
 
 
-@router.post("/{req_id}/attachments", status_code=status.HTTP_201_CREATED)
+_MAX_ATTACHMENTS_PER_REQUEST = 20
+_STREAM_CHUNK_SIZE = 1024 * 1024  # 1 MB
+_SAFE_FILENAME_CHARS = set(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.() äöüÄÖÜß"
+)
+
+
+def _sanitize_filename(name: str | None) -> str:
+    if not name:
+        return "datei"
+    # Strip path components
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    # Remove leading dots (no hidden files), drop disallowed chars
+    cleaned = "".join(c for c in name if c in _SAFE_FILENAME_CHARS).lstrip(".") or "datei"
+    return cleaned[:200]
+
+
+@router.post("/{req_id}/attachments", status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(verify_api_csrf)])
 async def upload_attachment(
     req_id: int,
     purpose: str = "GENERIC",
@@ -180,42 +204,63 @@ async def upload_attachment(
     if not workflow.can_edit(req, user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit")
 
-    # Validate MIME type
+    # Per-request attachment count limit (DoS protection)
+    existing_count = db.query(Attachment).filter(Attachment.request_id == req_id).count()
+    if existing_count >= _MAX_ATTACHMENTS_PER_REQUEST:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Maximum {_MAX_ATTACHMENTS_PER_REQUEST} attachments per request reached",
+        )
+
+    # Validate client-declared MIME type against allowlist (first line of defence)
     if file.content_type not in settings.ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"File type not allowed: {file.content_type}",
         )
 
-    # Read file
-    content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File too large (max 25 MB)",
-        )
-
-    # Sanitise filename and store
-    orig_ext = Path(file.filename or "file").suffix.lower()
-    storage_name = f"{uuid.uuid4()}{orig_ext}"
+    # Stream-read with running size check; abort early if quota exceeded
+    storage_name = uuid.uuid4().hex  # No extension in storage path — defeats path-based execution
     upload_dir = Path(settings.UPLOAD_DIR) / str(req_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     storage_path = upload_dir / storage_name
-    storage_path.write_bytes(content)
 
+    bytes_written = 0
+    try:
+        with storage_path.open("wb") as fh:
+            while True:
+                chunk = await file.read(_STREAM_CHUNK_SIZE)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > settings.MAX_UPLOAD_BYTES:
+                    fh.close()
+                    storage_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="File too large (max 25 MB)",
+                    )
+                fh.write(chunk)
+    except HTTPException:
+        raise
+    except Exception:
+        storage_path.unlink(missing_ok=True)
+        raise
+
+    safe_name = _sanitize_filename(file.filename)
     attachment = Attachment(
         request_id=req_id,
-        filename=file.filename or storage_name,
+        filename=safe_name,
         mime_type=file.content_type,
         storage_path=str(storage_path),
-        size_bytes=len(content),
+        size_bytes=bytes_written,
         purpose=purpose,
         uploaded_by=user.id,
         uploaded_at=datetime.utcnow(),
     )
     db.add(attachment)
     audit.log(db, user, AuditAction.ATTACHMENT_UPLOADED.value, "Attachment",
-              str(req_id), {"filename": file.filename, "purpose": purpose})
+              str(req_id), {"filename": safe_name, "purpose": purpose, "size": bytes_written})
     db.commit()
     db.refresh(attachment)
     return {"id": attachment.id, "filename": attachment.filename}
@@ -236,7 +281,17 @@ def download_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if not os.path.exists(att.storage_path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found on disk")
-    return FileResponse(att.storage_path, filename=att.filename, media_type=att.mime_type)
+    # Always force download (Content-Disposition: attachment) and disable MIME sniffing
+    # so a malicious .html or .svg can't be rendered inline by the browser.
+    return FileResponse(
+        att.storage_path,
+        filename=_sanitize_filename(att.filename),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_sanitize_filename(att.filename)}"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 def _get_req_or_404(db: Session, req_id: int) -> ApplicationRequest:

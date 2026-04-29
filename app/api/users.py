@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth_deps import require_admin
+from app.core.csrf import verify_api_csrf
 from app.core.security import hash_password
 from app.database import get_db
 from app.models import Role, User
@@ -33,7 +34,8 @@ def list_users(
     ]
 
 
-@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(verify_api_csrf)])
 def create_user(
     body: UserCreate,
     db: Session = Depends(get_db),

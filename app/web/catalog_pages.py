@@ -8,6 +8,7 @@ from app.core.auth_deps import get_current_user
 from app.database import get_db
 from app.models import CatalogEntry, User
 from app.web.templates import templates
+
 router = APIRouter(prefix="/catalog", tags=["web-catalog"])
 
 

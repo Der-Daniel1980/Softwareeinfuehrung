@@ -22,6 +22,17 @@ from app.services import audit, category_logic, mailer, revisions
 
 
 def can_view(req: ApplicationRequest, user: User) -> bool:
+    """Visibility check.
+
+    DESIGN NOTE (intentional, documented in docs/SECURITY.md): A reviewer with
+    any APPROVAL or INFO responsibility on a request sees the FULL request,
+    including fields where their role has neither I nor F responsibility.
+
+    This mirrors the spec's Excel template where every reviewer sees the
+    complete form for context — they need to read related fields to make a
+    sensible decision on their own. If field-level confidentiality is later
+    required, filter `field_values` in `_to_read()` per role.
+    """
     if user.has_role("ADMIN") or user.has_role("AUDITOR"):
         return True
     if req.requester_id == user.id:

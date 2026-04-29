@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth_deps import get_current_user
+from app.core.csrf import verify_api_csrf
 from app.database import get_db
 from app.models import ApplicationRequest, Comment, User
 from app.models.enums import AuditAction
@@ -34,7 +35,8 @@ def get_comments(
 
 
 @router.post("/requests/{req_id}/comments", response_model=CommentRead,
-             status_code=status.HTTP_201_CREATED)
+             status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(verify_api_csrf)])
 def add_comment(
     req_id: int,
     body: CommentCreate,
@@ -44,6 +46,17 @@ def add_comment(
     req = _get_req_or_404(db, req_id)
     if not workflow.can_view(req, user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+
+    # Validate role_id: user must actually be a member of the role they
+    # claim to comment as. Otherwise an attacker could pollute the audit
+    # trail by impersonating affiliation with another role.
+    if body.role_id is not None:
+        user_role_ids = {r.id for r in user.roles}
+        if body.role_id not in user_role_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of the specified role",
+            )
 
     comment = Comment(
         request_id=req_id,

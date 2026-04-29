@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth_deps import get_current_user
+from app.core.csrf import verify_api_csrf
 from app.database import get_db
 from app.models import ApplicationRequest, User
 from app.schemas.decision import DecisionRead, DecisionSet
@@ -36,7 +37,8 @@ def get_decisions(
     ]
 
 
-@router.post("/requests/{req_id}/decisions", response_model=DecisionRead)
+@router.post("/requests/{req_id}/decisions", response_model=DecisionRead,
+             dependencies=[Depends(verify_api_csrf)])
 def set_decision(
     req_id: int,
     body: DecisionSet,

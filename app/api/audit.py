@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth_deps import require_admin_or_auditor
@@ -14,8 +14,8 @@ router = APIRouter(prefix="/audit-log", tags=["audit"])
 def get_audit_log(
     db: Session = Depends(get_db),
     _user=Depends(require_admin_or_auditor),
-    limit: int = 200,
-    offset: int = 0,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
     logs = (
         db.query(AuditLog)

@@ -5,6 +5,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth_deps import get_current_user, require_admin
+from app.core.csrf import verify_api_csrf
 from app.database import get_db
 from app.models import CatalogEntry
 from app.models.enums import CatalogSource
@@ -43,7 +44,8 @@ def get_catalog_entry(
     return _to_read(entry)
 
 
-@router.post("/import", response_model=CatalogRead, status_code=status.HTTP_201_CREATED)
+@router.post("/import", response_model=CatalogRead, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(verify_api_csrf)])
 def import_catalog(
     body: CatalogImport,
     db: Session = Depends(get_db),

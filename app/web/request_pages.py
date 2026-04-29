@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import ApplicationRequest, FieldDefinition, Revision, User
 from app.services import responsibility, workflow
 from app.web.templates import templates
+
 router = APIRouter(prefix="/requests", tags=["web-requests"])
 
 

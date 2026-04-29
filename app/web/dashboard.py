@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import ApplicationRequest, User
 from app.services import workflow
 from app.web.templates import templates
+
 router = APIRouter(tags=["web-dashboard"])
 
 

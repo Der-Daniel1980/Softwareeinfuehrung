@@ -8,6 +8,7 @@ from app.core.auth_deps import require_admin, require_admin_or_auditor
 from app.database import get_db
 from app.models import AuditLog, User
 from app.web.templates import templates
+
 router = APIRouter(prefix="/admin", tags=["web-admin"])
 
 
