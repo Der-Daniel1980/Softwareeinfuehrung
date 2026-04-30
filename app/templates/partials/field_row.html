@@ -378,27 +378,40 @@
         {% endfor %}
 
       {% else %}
-        {# Edit mode: show existing decision chips + comments from all reviewer roles #}
+        {# Edit mode: show ALL reviewer roles (APPROVAL kind) with their state.
+           If no decision exists yet → "OFFEN" so the requester knows who is
+           still expected to act. If a decision exists → status badge plus the
+           full Rückfrage comment. #}
         {% for resp in field.responsibilities if resp.kind == 'APPROVAL' %}
         {% set dec_key = (fkey, resp.role_id) %}
         {% set dec = decisions.get(dec_key) if decisions is defined else None %}
-        {% if dec %}
         <div class="text-xs bg-gray-50 border border-gray-200 rounded p-2">
           <div class="flex items-center gap-2 mb-1">
             <span class="text-gray-500 font-semibold">{{ resp.role.code }}:</span>
-            {% set status = dec.status %}
-            {% include "components/status_badge.html" %}
-            {% if dec.decider %}
-            <span class="text-gray-400">{{ dec.decider.name }}</span>
+            {% if dec %}
+              {% set status = dec.status %}
+              {% include "components/status_badge.html" %}
+              {% if dec.decider %}
+              <span class="text-gray-400">{{ dec.decider.name }}</span>
+              {% endif %}
+            {% else %}
+              <span class="badge bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium">OFFEN</span>
             {% endif %}
           </div>
-          {% if dec.comment %}
+          {% if dec and dec.comment %}
           <div class="text-gray-700 leading-snug whitespace-pre-wrap pt-1 border-t border-gray-200">
             <span class="text-gray-400">💬 Rückfrage:</span> {{ dec.comment }}
           </div>
           {% endif %}
         </div>
-        {% endif %}
+        {% endfor %}
+
+        {# INFO-only roles: show as muted info chip so the requester knows
+           who is informed (read-only) about this field. #}
+        {% for resp in field.responsibilities if resp.kind == 'INFO' %}
+        <div class="text-[10px] text-gray-400 px-2 py-1">
+          ℹ Information: {{ resp.role.code }}
+        </div>
         {% endfor %}
       {% endif %}
 
