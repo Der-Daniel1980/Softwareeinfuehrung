@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -94,13 +94,33 @@ def patch_request(
 
 @router.patch("/{req_id}/fields/{key}", response_model=RequestRead,
               dependencies=[Depends(verify_api_csrf)])
-def patch_field(
+async def patch_field(
     req_id: int,
     key: str,
-    body: FieldValuePatch,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> RequestRead:
+    """Accepts either JSON ({"value": "..."}) or form-encoded (value=...).
+
+    HTMX submits hx-vals as application/x-www-form-urlencoded by default; bespoke
+    JS callers (e.g. saveMultiCheck) post JSON. Both flows must work without the
+    template having to opt into the json-enc extension.
+    """
+    ct = (request.headers.get("content-type") or "").lower()
+    value: str | None
+    if ct.startswith("application/json"):
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        value = data.get("value") if isinstance(data, dict) else None
+    else:
+        form = await request.form()
+        raw = form.get("value")
+        value = None if raw is None else str(raw)
+    body = FieldValuePatch(value=value)
+
     req = _get_req_or_404(db, req_id)
     if not workflow.can_edit(req, user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot edit")
