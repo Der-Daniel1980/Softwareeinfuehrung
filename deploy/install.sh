@@ -209,21 +209,49 @@ chown -R sysintro:sysintro "$SYSINTRO_HOME/app"
 # 6. Python venv + dependencies
 # ---------------------------------------------------------------------------
 info "=== Setting up Python virtual environment ==="
-# Ensure pip cache dir exists & is writable by sysintro (HOME=/opt/sysintro,
-# which is mode 750 — pip's default cache at $HOME/.cache otherwise fails).
+# Ubuntu 26.04 ships Python 3.14, but pydantic-core (via PyO3 0.24) does not
+# support 3.14 yet. We use `uv` to install a managed Python 3.13 build which
+# has pre-built wheels for all our dependencies. uv is a single static binary
+# from Astral, no build-from-source pain.
+
+# Pip cache dir, owned by sysintro (HOME=/opt/sysintro, mode 750)
 install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.cache"
 install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.cache/pip"
+install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.local"
 
-# Run pip with HOME pointing to a writable dir + explicit cache dir.
-# PYO3_USE_ABI3_FORWARD_COMPATIBILITY allows pydantic-core to build on
-# Python 3.14 even though PyO3 0.24 officially supports up to 3.13. It
-# uses the stable ABI which is forward-compatible. Drop this once PyO3
-# updates and pydantic-core ships a 3.14 wheel.
-PIP_ENV=(env "HOME=$SYSINTRO_HOME" "PIP_CACHE_DIR=$SYSINTRO_HOME/.cache/pip" "PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1")
+# Install uv globally if not present
+if ! command -v uv >/dev/null 2>&1; then
+    info "Installing uv (Python toolchain manager)..."
+    curl -LsSf --connect-timeout 10 https://astral.sh/uv/install.sh \
+        | UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+fi
+if ! command -v uv >/dev/null 2>&1; then
+    error "uv installation failed; check curl output above"
+fi
+info "uv version: $(uv --version)"
 
-sudo -u sysintro "${PIP_ENV[@]}" python3 -m venv "$SYSINTRO_HOME/venv"
-sudo -u sysintro "${PIP_ENV[@]}" "$SYSINTRO_HOME/venv/bin/pip" install --upgrade pip wheel --quiet
-sudo -u sysintro "${PIP_ENV[@]}" "$SYSINTRO_HOME/venv/bin/pip" install -r "$SYSINTRO_HOME/app/requirements.txt" --quiet
+# Env so uv & pip place their data under sysintro's home (writable)
+UV_ENV=(env
+    "HOME=$SYSINTRO_HOME"
+    "UV_CACHE_DIR=$SYSINTRO_HOME/.cache/uv"
+    "UV_PYTHON_INSTALL_DIR=$SYSINTRO_HOME/.local/share/uv/python"
+    "PIP_CACHE_DIR=$SYSINTRO_HOME/.cache/pip"
+)
+
+# Install managed Python 3.13 (idempotent — uv skips if already present)
+info "Installing Python 3.13 via uv..."
+sudo -u sysintro "${UV_ENV[@]}" uv python install 3.13
+
+# Create venv with that Python; --seed installs pip into the venv too
+sudo -u sysintro "${UV_ENV[@]}" uv venv --python 3.13 --seed "$SYSINTRO_HOME/venv"
+
+# Install dependencies via uv pip (significantly faster than pip)
+info "Installing Python dependencies (this may take 1-2 min)..."
+sudo -u sysintro "${UV_ENV[@]}" \
+    "$SYSINTRO_HOME/venv/bin/python" -m pip install --upgrade pip wheel --quiet
+sudo -u sysintro "${UV_ENV[@]}" \
+    uv pip install --python "$SYSINTRO_HOME/venv/bin/python" \
+    -r "$SYSINTRO_HOME/app/requirements.txt" --quiet
 
 # ---------------------------------------------------------------------------
 # 7. Config (.env) — idempotent, never overwrite
