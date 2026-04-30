@@ -60,9 +60,11 @@
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">Abschnitte</p>
         <nav class="space-y-0.5">
           {% for sec in sections %}
-            {# Compute per-section progress for the current viewer's roles #}
+            {# Compute per-section progress for the current viewer's roles.
+               sec.fields is a list of {"field": FieldDefinition, "editable": bool}. #}
             {% set ns = namespace(my_open=0, my_done=0, my_rejected=0, total_my=0, filled=0, total=0) %}
-            {% for f in sec.fields %}
+            {% for item in sec.fields %}
+              {% set f = item.field %}
               {% set ns.total = ns.total + 1 %}
               {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
               {% for resp in f.responsibilities if resp.kind == 'APPROVAL' and resp.role.code in role_codes %}

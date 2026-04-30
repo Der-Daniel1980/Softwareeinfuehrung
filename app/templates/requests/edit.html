@@ -53,9 +53,10 @@
         <nav class="space-y-0.5">
           {% for sec in sections %}
             {% set sec_name = sec.section %}
-            {# Progress per section: required-filled vs required-total + decisions #}
+            {# sec.fields is [{"field": FieldDefinition, "editable": bool}] #}
             {% set ns = namespace(req_total=0, req_filled=0, total=0, filled=0, rejected=0) %}
-            {% for f in sec.fields %}
+            {% for item in sec.fields %}
+              {% set f = item.field %}
               {% set ns.total = ns.total + 1 %}
               {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
               {% if f.is_required %}
