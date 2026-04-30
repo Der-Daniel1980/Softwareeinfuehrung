@@ -21,8 +21,17 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    # Allow override via environment variable
-    return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
+    # Priority: explicit env var > app.config.Settings (which reads .env) > alembic.ini default
+    explicit = os.getenv("DATABASE_URL")
+    if explicit:
+        return explicit
+    try:
+        from app.config import settings  # loads .env via pydantic-settings
+        if settings.DATABASE_URL:
+            return settings.DATABASE_URL
+    except Exception:
+        pass
+    return config.get_main_option("sqlalchemy.url")
 
 
 def run_migrations_offline() -> None:
