@@ -127,6 +127,37 @@
 
           {% elif field.input_type == 'ENUM' %}
           {% set enum_opts = field.enum_values | from_json if field.enum_values else [] %}
+          {% set dynamic_opts = picklists.get(fkey) if picklists is defined else None %}
+
+          {% if dynamic_opts is not none %}
+          {# Combo box: select from list OR type free text. Future Keycloak/EntraID
+             integration only needs to repopulate `picklists` server-side. #}
+          <input
+            type="text"
+            id="input-{{ fkey_safe }}"
+            name="{{ fkey }}"
+            value="{{ current_val }}"
+            list="datalist-{{ fkey_safe }}"
+            placeholder="Name eingeben oder aus Liste wählen"
+            autocomplete="off"
+            data-field-key="{{ fkey }}"
+            hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+            hx-trigger="blur, change"
+            hx-vals='js:{value: event.target.value}'
+            hx-swap="none"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+          />
+          <datalist id="datalist-{{ fkey_safe }}">
+            {% for opt in dynamic_opts %}
+            <option value="{{ opt.value }}" label="{{ opt.label }}"></option>
+            {% endfor %}
+          </datalist>
+          <p class="text-xs text-gray-400 mt-1">
+            Tipp: aus der Liste wählen oder Namen frei eingeben (z. B. wenn die
+            Person noch keinen Account hat).
+          </p>
+
+          {% else %}
           <select
             id="input-{{ fkey_safe }}"
             name="{{ fkey }}"
@@ -142,11 +173,29 @@
             <option value="{{ opt }}" {% if current_val == opt %}selected{% endif %}>{{ opt }}</option>
             {% endfor %}
           </select>
+          {% endif %}
 
           {% elif field.input_type == 'ENUM_MULTI' %}
           {% set enum_opts = field.enum_values | from_json if field.enum_values else [] %}
+          {% set dynamic_opts = picklists.get(fkey) if picklists is defined else None %}
           {% set selected_vals = current_val.split(',') if current_val else [] %}
           <div id="input-{{ fkey_safe }}" class="space-y-1 mt-1">
+            {% if dynamic_opts is not none %}
+            {% for opt in dynamic_opts %}
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                name="{{ fkey }}"
+                value="{{ opt.value }}"
+                data-field-key="{{ fkey }}"
+                {% if opt.value in selected_vals %}checked{% endif %}
+                onchange="saveMultiCheck('{{ fkey }}', '{{ req.id }}')"
+                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span class="text-sm text-gray-700">{{ opt.label }}</span>
+            </label>
+            {% endfor %}
+            {% else %}
             {% for opt in enum_opts %}
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -161,6 +210,7 @@
               <span class="text-sm text-gray-700">{{ opt }}</span>
             </label>
             {% endfor %}
+            {% endif %}
           </div>
 
           {% elif field.input_type == 'FILE' %}

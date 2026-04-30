@@ -8,9 +8,39 @@ from sqlalchemy.orm import Session
 
 from app.core.auth_deps import get_current_user
 from app.database import get_db
-from app.models import ApplicationRequest, FieldDefinition, Revision, User
+from app.models import ApplicationRequest, BitFcCategory, FieldDefinition, Revision, User
 from app.services import responsibility, workflow
 from app.web.templates import templates
+
+
+def _picklist_options(db: Session) -> dict[str, list[dict]]:
+    """Returns option lists for fields whose enum_values are defined dynamically.
+
+    For Application Owner / IT Application Owner the picklist is the set of
+    active users; the form still allows free text via <datalist> so demo users
+    can enter a colleague's name even if they don't have an account yet.
+    Future Keycloak / Entra ID integration would replace the User query with a
+    directory lookup but the template does not need to change.
+    """
+    users = (
+        db.query(User)
+        .filter(User.is_active.is_(True))
+        .order_by(User.name)
+        .all()
+    )
+    bit_fc = db.query(BitFcCategory).order_by(BitFcCategory.name).all()
+    return {
+        "stammdaten.application_owner": [
+            {"value": u.name, "label": f"{u.name} ({u.email})"} for u in users
+        ],
+        "stammdaten.it_application_owner": [
+            {"value": u.name, "label": f"{u.name} ({u.email})"} for u in users
+        ],
+        "stammdaten.bit_fc": [
+            {"value": c.name, "label": c.name + (f" – {c.description}" if c.description else "")}
+            for c in bit_fc
+        ],
+    }
 
 router = APIRouter(prefix="/requests", tags=["web-requests"])
 
@@ -82,6 +112,7 @@ async def request_detail(
             "all_fields": all_fields,
             "field_values": field_values,
             "role_codes": role_codes,
+            "picklists": _picklist_options(db),
         },
     )
 
@@ -111,6 +142,7 @@ async def request_review(
             "field_values": field_values,
             "decisions": decisions,
             "role_codes": role_codes,
+            "picklists": _picklist_options(db),
         },
     )
 
