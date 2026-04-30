@@ -209,9 +209,17 @@ chown -R sysintro:sysintro "$SYSINTRO_HOME/app"
 # 6. Python venv + dependencies
 # ---------------------------------------------------------------------------
 info "=== Setting up Python virtual environment ==="
-sudo -u sysintro python3 -m venv "$SYSINTRO_HOME/venv"
-sudo -u sysintro "$SYSINTRO_HOME/venv/bin/pip" install --upgrade pip wheel --quiet
-sudo -u sysintro "$SYSINTRO_HOME/venv/bin/pip" install -r "$SYSINTRO_HOME/app/requirements.txt" --quiet
+# Ensure pip cache dir exists & is writable by sysintro (HOME=/opt/sysintro,
+# which is mode 750 — pip's default cache at $HOME/.cache otherwise fails).
+install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.cache"
+install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.cache/pip"
+
+# Run pip with HOME pointing to a writable dir + explicit cache dir
+PIP_ENV=(env "HOME=$SYSINTRO_HOME" "PIP_CACHE_DIR=$SYSINTRO_HOME/.cache/pip")
+
+sudo -u sysintro "${PIP_ENV[@]}" python3 -m venv "$SYSINTRO_HOME/venv"
+sudo -u sysintro "${PIP_ENV[@]}" "$SYSINTRO_HOME/venv/bin/pip" install --upgrade pip wheel --quiet
+sudo -u sysintro "${PIP_ENV[@]}" "$SYSINTRO_HOME/venv/bin/pip" install -r "$SYSINTRO_HOME/app/requirements.txt" --quiet
 
 # ---------------------------------------------------------------------------
 # 7. Config (.env) — idempotent, never overwrite
