@@ -186,6 +186,9 @@ useradd --system --home "$SYSINTRO_HOME" --shell /usr/sbin/nologin sysintro 2>/d
 # 4. Directory structure
 # ---------------------------------------------------------------------------
 info "=== Creating directory structure under $SYSINTRO_HOME ==="
+# /opt/sysintro itself must be sysintro-owned so the user can create files
+# (venv, .cache, .local) inside it without help from root.
+install -d -o sysintro -g sysintro -m 755 "$SYSINTRO_HOME"
 for d in app data attachments logs venv; do
     install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/$d"
 done
