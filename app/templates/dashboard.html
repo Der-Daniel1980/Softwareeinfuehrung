@@ -32,14 +32,18 @@
         <div class="text-xs text-indigo-500 mt-2 group-hover:underline">Alle anzeigen →</div>
       </a>
 
-      <a href="/requests?filter=mine&status=CHANGES_REQUESTED" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md hover:border-amber-300 transition-all group">
+      {# "Mit Rückfragen" zählt jetzt eingereichte Anträge, bei denen Reviewer
+         offene Fragen haben (open_questions > 0 in irgendeiner Rolle).
+         Click jumpt zum Anker im "Meine Anträge in Prüfung"-Block. #}
+      {% set my_open_q = requests | selectattr('requester_id', 'equalto', user.id) | rejectattr('status', 'equalto', 'DRAFT') | list if requests is defined else [] %}
+      {% set my_open_q = my_open_q | selectattr('id', 'in', open_q_request_ids) | list %}
+      <a href="#meine-rueckfragen" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md hover:border-amber-300 transition-all group">
         <div class="flex items-center justify-between mb-3">
           <span class="text-sm font-medium text-gray-500">Mit Rückfragen</span>
           <span class="text-2xl">💬</span>
         </div>
-        {% set my_changes = requests | selectattr('requester_id', 'equalto', user.id) | selectattr('status', 'equalto', 'CHANGES_REQUESTED') | list if requests is defined else [] %}
-        <div class="text-3xl font-bold text-amber-600">{{ my_changes | length }}</div>
-        <div class="text-xs text-amber-500 mt-2 group-hover:underline">Alle anzeigen →</div>
+        <div class="text-3xl font-bold {% if my_open_q | length > 0 %}text-amber-600{% else %}text-gray-300{% endif %}">{{ my_open_q | length }}</div>
+        <div class="text-xs {% if my_open_q | length > 0 %}text-amber-500{% else %}text-gray-400{% endif %} mt-2 group-hover:underline">{% if my_open_q | length > 0 %}zu den Rückfragen ↓{% else %}derzeit keine{% endif %}</div>
       </a>
 
       <a href="/requests?filter=mine&status=APPROVED" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md hover:border-green-300 transition-all group">
@@ -59,46 +63,58 @@
       </a>
     </div>
 
-    {# Eingereichte Anträge des aktuellen Antragstellers mit Reviewer-Status #}
+    {# Eingereichte Anträge des aktuellen Antragstellers, eine Karte pro Antrag.
+       Karte besteht aus 2 Bereichen:
+         oben  – Reviewer-Status-Chips
+         unten – falls offene Rückfragen → eigener gelber Block "💬 N Rückfragen"
+       So sind Status und Q&A optisch klar getrennt. #}
     {% set my_pending = requests | selectattr('requester_id', 'equalto', user.id) | selectattr('status', 'in', ['SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED']) | list if requests is defined else [] %}
     {% if my_pending %}
-    <div class="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <p class="text-sm font-semibold text-gray-700">Meine Anträge in Prüfung</p>
+    <div id="meine-rueckfragen" class="mt-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-700">Meine Anträge in Prüfung</h3>
         <span class="text-xs text-gray-500">{{ my_pending | length }} aktiv</span>
       </div>
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titel</th>
-            <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Reviewer-Status</th>
-            <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Eingereicht</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          {% for req in my_pending %}
-          {% set _prog = progress_by_id.get(req.id, []) %}
-          <tr class="table-row-hover align-top">
-            <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ req.title }}</td>
-            <td class="px-4 py-3">
-              {% with progress=_prog, compact=True %}
-                {% include "partials/role_progress_chips.html" %}
-              {% endwith %}
-              {% with progress=_prog, req_id=req.id %}
-                {% include "partials/role_questions_inline.html" %}
-              {% endwith %}
-            </td>
-            <td class="px-4 py-3 text-xs text-gray-500">
-              {{ req.submitted_at.strftime('%d.%m.%Y') if req.submitted_at else '—' }}
-            </td>
-            <td class="px-4 py-3 text-right">
-              <a href="/requests/{{ req.id }}" class="text-sm text-indigo-600 hover:underline font-medium">Öffnen →</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+
+      {% for req in my_pending %}
+        {% set _prog = progress_by_id.get(req.id, []) %}
+        {% set total_q = (_prog | sum(attribute='open_questions')) if _prog else 0 %}
+      <div class="bg-white rounded-xl border {% if total_q > 0 %}border-amber-300{% else %}border-gray-200{% endif %} shadow-sm overflow-hidden">
+
+        <!-- Header -->
+        <div class="px-4 py-3 flex flex-wrap items-center justify-between gap-2 {% if total_q > 0 %}bg-amber-50 border-b border-amber-200{% else %}bg-gray-50 border-b border-gray-200{% endif %}">
+          <div class="flex items-center gap-3 min-w-0">
+            <h4 class="text-sm font-semibold text-gray-900 truncate">{{ req.title }}</h4>
+            {% set status = req.status %}
+            {% include "components/status_badge.html" %}
+            {% if total_q > 0 %}
+            <span class="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-semibold">💬 {{ total_q }} Rückfrage{% if total_q != 1 %}n{% endif %}</span>
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-3 text-xs text-gray-500">
+            <span>{{ req.submitted_at.strftime('%d.%m.%Y') if req.submitted_at else '—' }}</span>
+            <a href="/requests/{{ req.id }}" class="text-indigo-600 hover:underline font-medium">Öffnen →</a>
+          </div>
+        </div>
+
+        <!-- Reviewer-Chips -->
+        <div class="px-4 py-3">
+          {% with progress=_prog, compact=True %}
+            {% include "partials/role_progress_chips.html" %}
+          {% endwith %}
+        </div>
+
+        <!-- Rückfragen-Block (separat, nur wenn vorhanden) -->
+        {% if total_q > 0 %}
+        <div class="px-4 py-3 bg-amber-50/50 border-t border-amber-200">
+          <p class="text-xs font-semibold text-amber-900 mb-2">💬 Offene Rückfragen</p>
+          {% with progress=_prog, req_id=req.id %}
+            {% include "partials/role_questions_inline.html" %}
+          {% endwith %}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
     </div>
     {% endif %}
   </div>

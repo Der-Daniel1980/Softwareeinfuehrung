@@ -30,6 +30,14 @@ async def dashboard(
         for r in visible
         if r.status != "DRAFT"
     }
+    # Identify requests with at least one open question so the "Mit Rückfragen"
+    # tile can use a meaningful count (the legacy CHANGES_REQUESTED status was
+    # never the right signal once we introduced threaded comments + decision
+    # comments).
+    open_q_request_ids = {
+        rid for rid, prog in progress_by_id.items()
+        if any(p["open_questions"] > 0 for p in prog)
+    }
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -37,6 +45,7 @@ async def dashboard(
             "user": user,
             "requests": visible,
             "progress_by_id": progress_by_id,
+            "open_q_request_ids": open_q_request_ids,
             "now": datetime.utcnow,
         },
     )

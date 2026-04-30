@@ -7,7 +7,7 @@
 #}
 {% set has_questions = progress | selectattr('questions') | list %}
 {% if has_questions %}
-<div class="mt-2 space-y-1">
+<div class="space-y-1">
   {% for r in progress if r.questions %}
     {% for q in r.questions %}
     <a
