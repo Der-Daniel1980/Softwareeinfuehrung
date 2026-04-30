@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -58,6 +59,31 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Error handler
 app.add_exception_handler(Exception, generic_exception_handler)
+
+
+# UX: when an unauthenticated user hits a web (HTML) route, redirect to /login
+# instead of returning the JSON {"detail":"Not authenticated"} body. API routes
+# under /api/v1 keep returning JSON 401 as before.
+@app.exception_handler(HTTPException)
+async def auth_redirect_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 401:
+        path = request.url.path
+        accept = request.headers.get("accept", "")
+        is_api = path.startswith("/api/")
+        wants_html = "text/html" in accept
+        if not is_api and (wants_html or accept == "" or accept == "*/*"):
+            target = "/login"
+            # preserve where user wanted to go (only safe relative paths)
+            if path and path != "/" and path != "/login" and not path.startswith("/api/"):
+                from urllib.parse import quote
+                target = f"/login?next={quote(path)}"
+            return RedirectResponse(url=target, status_code=303)
+    # Default: keep FastAPI's standard JSON error
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None) or {},
+    )
 
 # CORS — tightly scoped: only configured origins, only methods/headers we actually use
 app.add_middleware(
