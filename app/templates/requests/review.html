@@ -139,6 +139,52 @@
 
 {% block extra_scripts %}
 <script>
+// Submit a per-field comment / Rückfrage and append it to the thread.
+window.submitComment = function(ev, form, reqId, fieldKey, fieldSafe) {
+  ev.preventDefault();
+  var ta = form.querySelector('textarea[name="body"]');
+  var roleEl = form.querySelector('input[name="role_id"]');
+  var body = (ta.value || '').trim();
+  if (!body) return false;
+  var payload = { body: body, field_key: fieldKey };
+  if (roleEl && roleEl.value) payload.role_id = parseInt(roleEl.value, 10);
+  fetch('/api/v1/requests/' + reqId + '/comments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+    body: JSON.stringify(payload),
+  }).then(function(r) {
+    if (!r.ok) {
+      if (window.showFlash) showFlash('error', 'Kommentar konnte nicht gespeichert werden.');
+      return;
+    }
+    return r.json();
+  }).then(function(c) {
+    if (!c) return;
+    var thread = form.parentElement;
+    var bubble = document.createElement('div');
+    bubble.className = 'flex gap-2';
+    bubble.innerHTML =
+      '<div class="max-w-[80%] bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-2">' +
+        '<div class="flex items-center gap-2 text-[10px] mb-1">' +
+          '<span class="font-bold">{{ user.name }}</span>' +
+          '<span class="opacity-60">gerade eben</span>' +
+        '</div>' +
+        '<div class="whitespace-pre-wrap leading-snug"></div>' +
+      '</div>';
+    bubble.querySelector('.whitespace-pre-wrap').textContent = body;
+    thread.insertBefore(bubble, form);
+    ta.value = '';
+    if (window.showFlash) showFlash('success', 'Kommentar gespeichert.');
+  }).catch(function() {
+    if (window.showFlash) showFlash('error', 'Netzwerkfehler.');
+  });
+  return false;
+};
+</script>
+<script>
 function toggleSection(sectionSafe) {
   var body = document.getElementById('section-body-' + sectionSafe);
   var chevron = document.getElementById('section-chevron-' + sectionSafe);

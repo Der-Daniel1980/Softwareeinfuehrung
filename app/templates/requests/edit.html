@@ -263,6 +263,54 @@
 
 {% block extra_scripts %}
 <script>
+// Submit a per-field comment / Rückfrage and append it to the thread.
+window.submitComment = function(ev, form, reqId, fieldKey, fieldSafe) {
+  ev.preventDefault();
+  var ta = form.querySelector('textarea[name="body"]');
+  var roleEl = form.querySelector('input[name="role_id"]');
+  var body = (ta.value || '').trim();
+  if (!body) return false;
+  var payload = { body: body, field_key: fieldKey };
+  if (roleEl && roleEl.value) payload.role_id = parseInt(roleEl.value, 10);
+  fetch('/api/v1/requests/' + reqId + '/comments', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+    body: JSON.stringify(payload),
+  }).then(function(r) {
+    if (!r.ok) {
+      if (window.showFlash) showFlash('error', 'Kommentar konnte nicht gespeichert werden.');
+      return;
+    }
+    return r.json();
+  }).then(function(c) {
+    if (!c) return;
+    // Append optimistic bubble. The conversation re-renders on next page load
+    // with the canonical formatting; this keeps the UX snappy.
+    var thread = form.parentElement;  // .space-y-2 wrapper
+    var isMine = true;  // current user authored it
+    var bubble = document.createElement('div');
+    bubble.className = 'flex gap-2 justify-end';
+    bubble.innerHTML =
+      '<div class="max-w-[80%] bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg p-2">' +
+        '<div class="flex items-center gap-2 text-[10px] mb-1">' +
+          '<span class="font-bold">{{ user.name }}</span>' +
+          '<span class="opacity-60">gerade eben</span>' +
+        '</div>' +
+        '<div class="whitespace-pre-wrap leading-snug"></div>' +
+      '</div>';
+    bubble.querySelector('.whitespace-pre-wrap').textContent = body;
+    thread.insertBefore(bubble, form);
+    ta.value = '';
+    if (window.showFlash) showFlash('success', 'Kommentar gespeichert.');
+  }).catch(function() {
+    if (window.showFlash) showFlash('error', 'Netzwerkfehler.');
+  });
+  return false;
+};
+
 // Toggle section collapse
 function toggleSection(sectionSafe) {
   var body = document.getElementById('section-body-' + sectionSafe);

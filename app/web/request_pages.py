@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import (
     ApplicationRequest,
     BitFcCategory,
+    Comment,
     FieldDefinition,
     Revision,
     SystemCategoryDefinition,
@@ -71,6 +72,25 @@ def _system_category_definitions(db: Session) -> list[SystemCategoryDefinition]:
         .order_by(SystemCategoryDefinition.code)
         .all()
     )
+
+
+def _comments_by_field(db: Session, req_id: int) -> dict[str, list[Comment]]:
+    """Group field-bound comments by field_key, oldest first.
+
+    Threads display reads the latest exchange last so the conversation flows
+    top-to-bottom. Field-less comments (general request comments) are ignored
+    here because the field_row partial only renders field-bound threads.
+    """
+    rows = (
+        db.query(Comment)
+        .filter(Comment.request_id == req_id, Comment.field_key.isnot(None))
+        .order_by(Comment.created_at.asc())
+        .all()
+    )
+    out: dict[str, list[Comment]] = {}
+    for c in rows:
+        out.setdefault(c.field_key, []).append(c)
+    return out
 
 router = APIRouter(prefix="/requests", tags=["web-requests"])
 
@@ -148,6 +168,7 @@ async def request_detail(
     # Reviewer decisions are surfaced to the requester in edit mode so that
     # any 'Rückfrage' comment is visible inline next to the original field.
     decisions = {(d.field_key, d.role_id): d for d in req.decisions}
+    comments_by_field = _comments_by_field(db, req.id)
     role_prog = progress_svc.role_progress(db, req) if req.status != "DRAFT" else []
     return templates.TemplateResponse(
         "requests/edit.html",
@@ -159,6 +180,7 @@ async def request_detail(
             "all_fields": all_fields,
             "field_values": field_values,
             "decisions": decisions,
+            "comments_by_field": comments_by_field,
             "role_progress": role_prog,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
@@ -182,6 +204,7 @@ async def request_review(
     field_values = {fv.field_key: fv.value_text for fv in req.field_values}
     # decisions keyed by (field_key, role_id)
     decisions = {(d.field_key, d.role_id): d for d in req.decisions}
+    comments_by_field = _comments_by_field(db, req.id)
     role_prog = progress_svc.role_progress(db, req)
     return templates.TemplateResponse(
         "requests/review.html",
@@ -192,6 +215,7 @@ async def request_review(
             "sections": sections,
             "field_values": field_values,
             "decisions": decisions,
+            "comments_by_field": comments_by_field,
             "role_progress": role_prog,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
