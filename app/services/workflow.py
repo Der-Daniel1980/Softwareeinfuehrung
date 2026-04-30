@@ -261,16 +261,28 @@ def set_decision(
         .first()
     )
     if not decision:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Decision not found"
+        # No stub yet – create one. Stubs are normally produced by `submit()`,
+        # but a request can also be set to a reviewable status by alternative
+        # means (e.g. seeded demo data). Auto-creating here keeps the API
+        # idempotent and lets reviewers act on any field they're authorised for.
+        decision = ApprovalDecision(
+            request_id=req.id,
+            field_key=field_key,
+            role_id=role_id,
+            status=new_status,
+            decided_by=actor.id,
+            decided_at=datetime.utcnow(),
+            comment=comment,
         )
-
-    old_status = decision.status
-    decision.status = new_status
-    decision.decided_by = actor.id
-    decision.decided_at = datetime.utcnow()
-    if comment is not None:
-        decision.comment = comment
+        session.add(decision)
+        old_status = None
+    else:
+        old_status = decision.status
+        decision.status = new_status
+        decision.decided_by = actor.id
+        decision.decided_at = datetime.utcnow()
+        if comment is not None:
+            decision.comment = comment
 
     audit.log(
         session,
