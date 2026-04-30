@@ -131,6 +131,9 @@ async def request_detail(
     sections = responsibility.sections_for_request(db, req, role_codes)
     all_fields = db.query(FieldDefinition).order_by(FieldDefinition.sort_order).all()
     field_values = {fv.field_key: fv.value_text for fv in req.field_values}
+    # Reviewer decisions are surfaced to the requester in edit mode so that
+    # any 'Rückfrage' comment is visible inline next to the original field.
+    decisions = {(d.field_key, d.role_id): d for d in req.decisions}
     return templates.TemplateResponse(
         "requests/edit.html",
         {
@@ -140,6 +143,7 @@ async def request_detail(
             "sections": sections,
             "all_fields": all_fields,
             "field_values": field_values,
+            "decisions": decisions,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
             "system_categories": _system_category_definitions(db),

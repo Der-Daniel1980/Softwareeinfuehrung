@@ -348,13 +348,13 @@
                 <option value="REJECTED" {% if dec and dec.status == 'REJECTED' %}selected{% endif %}>Abgelehnt</option>
                 <option value="IN_REVIEW" {% if dec and dec.status == 'IN_REVIEW' %}selected{% endif %}>In Prüfung</option>
               </select>
-              <div id="comment-box-{{ fkey_safe }}-{{ resp.role_id }}" class="hidden mt-1">
+              <div id="comment-box-{{ fkey_safe }}-{{ resp.role_id }}" class="mt-1">
                 <textarea
                   id="dec-comment-{{ fkey_safe }}-{{ resp.role_id }}"
-                  placeholder="Begründung (Pflicht bei Ablehnung)"
+                  placeholder="Kommentar / Rückfrage an den Antragsteller (Pflicht bei Ablehnung)"
                   rows="2"
                   class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-                ></textarea>
+                >{% if dec and dec.comment %}{{ dec.comment }}{% endif %}</textarea>
               </div>
               <button
                 type="button"
@@ -378,17 +378,24 @@
         {% endfor %}
 
       {% else %}
-        {# Edit mode: show existing decision chips from all roles #}
+        {# Edit mode: show existing decision chips + comments from all reviewer roles #}
         {% for resp in field.responsibilities if resp.kind == 'APPROVAL' %}
         {% set dec_key = (fkey, resp.role_id) %}
         {% set dec = decisions.get(dec_key) if decisions is defined else None %}
         {% if dec %}
-        <div class="flex items-center gap-2 text-xs">
-          <span class="text-gray-500">{{ resp.role.code }}:</span>
-          {% set status = dec.status %}
-          {% include "components/status_badge.html" %}
-          {% if dec.decider %}
-          <span class="text-gray-400">{{ dec.decider.name }}</span>
+        <div class="text-xs bg-gray-50 border border-gray-200 rounded p-2">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-gray-500 font-semibold">{{ resp.role.code }}:</span>
+            {% set status = dec.status %}
+            {% include "components/status_badge.html" %}
+            {% if dec.decider %}
+            <span class="text-gray-400">{{ dec.decider.name }}</span>
+            {% endif %}
+          </div>
+          {% if dec.comment %}
+          <div class="text-gray-700 leading-snug whitespace-pre-wrap pt-1 border-t border-gray-200">
+            <span class="text-gray-400">💬 Rückfrage:</span> {{ dec.comment }}
+          </div>
           {% endif %}
         </div>
         {% endif %}

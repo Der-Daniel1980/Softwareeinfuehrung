@@ -3,7 +3,9 @@
 
 {% block content %}
 {% set role_codes = user.role_codes() %}
-{% set decisions = {} %}
+{# `decisions` is provided by the view (keyed by (field_key, role_id)). Default
+   to empty dict so jinja stays defensive even on legacy routes. #}
+{% if decisions is not defined %}{% set decisions = {} %}{% endif %}
 
 <div class="max-w-7xl mx-auto px-4 py-6">
 
@@ -44,22 +46,60 @@
 
   <div class="flex gap-6">
 
-    <!-- Left sidebar: section nav -->
-    <aside class="hidden lg:block w-56 flex-shrink-0">
+    <!-- Left sidebar: section nav with progress -->
+    <aside class="hidden lg:block w-64 flex-shrink-0">
       <div class="sticky-sidebar bg-white rounded-xl border border-gray-200 shadow-sm p-3">
         <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">Abschnitte</p>
         <nav class="space-y-0.5">
           {% for sec in sections %}
-          {% set sec_name = sec.section %}
+            {% set sec_name = sec.section %}
+            {# Progress per section: required-filled vs required-total + decisions #}
+            {% set ns = namespace(req_total=0, req_filled=0, total=0, filled=0, rejected=0) %}
+            {% for f in sec.fields %}
+              {% set ns.total = ns.total + 1 %}
+              {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
+              {% if f.is_required %}
+                {% set ns.req_total = ns.req_total + 1 %}
+                {% if field_values.get(f.key) %}{% set ns.req_filled = ns.req_filled + 1 %}{% endif %}
+              {% endif %}
+              {% for resp in f.responsibilities if resp.kind == 'APPROVAL' %}
+                {% set d = decisions.get((f.key, resp.role_id)) %}
+                {% if d and d.status == 'REJECTED' %}{% set ns.rejected = ns.rejected + 1 %}{% endif %}
+              {% endfor %}
+            {% endfor %}
+            {% if ns.rejected > 0 %}
+              {% set dot = 'bg-red-500' %}{% set badge_cls = 'bg-red-100 text-red-700' %}{% set badge_txt = ns.rejected ~ ' ABL.' %}
+            {% elif ns.req_total == 0 %}
+              {% set dot = 'bg-gray-300' %}{% set badge_cls = 'bg-gray-100 text-gray-500' %}{% set badge_txt = ns.filled ~ '/' ~ ns.total %}
+            {% elif ns.req_filled == ns.req_total %}
+              {% set dot = 'bg-emerald-500' %}{% set badge_cls = 'bg-emerald-100 text-emerald-700' %}{% set badge_txt = '✓ ' ~ ns.req_filled ~ '/' ~ ns.req_total %}
+            {% elif ns.req_filled == 0 %}
+              {% set dot = 'bg-gray-300' %}{% set badge_cls = 'bg-gray-100 text-gray-500' %}{% set badge_txt = '0/' ~ ns.req_total %}
+            {% else %}
+              {% set dot = 'bg-amber-400' %}{% set badge_cls = 'bg-amber-100 text-amber-700' %}{% set badge_txt = ns.req_filled ~ '/' ~ ns.req_total %}
+            {% endif %}
           <a
             href="#section-{{ sec_name }}"
-            class="section-link wizard-nav-item flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-600 hover:text-gray-900"
+            class="section-link wizard-nav-item flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:text-gray-900 hover:bg-gray-50"
+            title="{{ ns.req_filled }} von {{ ns.req_total }} Pflichtfeldern ausgefüllt · {{ ns.rejected }} Rückfrage(n)"
           >
-            <span>{{ sec_name }}</span>
-            <span id="check-{{ sec_name }}" class="text-xs text-green-500"></span>
+            <span class="flex items-center gap-2 min-w-0">
+              <span class="inline-block w-2 h-2 rounded-full {{ dot }} flex-shrink-0"></span>
+              <span class="truncate">{{ sec_name }}</span>
+            </span>
+            <span class="text-[10px] font-medium px-1.5 py-0.5 rounded {{ badge_cls }} flex-shrink-0">{{ badge_txt }}</span>
           </a>
           {% endfor %}
         </nav>
+        <div class="mt-3 pt-3 border-t border-gray-100 px-3">
+          <p class="text-[10px] text-gray-400 uppercase font-semibold mb-1">Legende</p>
+          <div class="space-y-1 text-[11px] text-gray-500">
+            <div class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span> Pflichtfelder vollständig</div>
+            <div class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-amber-400"></span> Teilweise ausgefüllt</div>
+            <div class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-red-500"></span> Rückfrage / Ablehnung offen</div>
+            <div class="flex items-center gap-2"><span class="inline-block w-2 h-2 rounded-full bg-gray-300"></span> Noch nichts ausgefüllt</div>
+          </div>
+        </div>
       </div>
     </aside>
 
