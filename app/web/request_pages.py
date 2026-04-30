@@ -54,7 +54,7 @@ def _picklist_options(db: Session) -> dict[str, list[dict]]:
             {"value": u.name, "label": f"{u.name} ({u.email})"} for u in users
         ],
         "stammdaten.bit_fc": [
-            {"value": c.name, "label": c.name + (f" – {c.description}" if c.description else "")}
+            {"value": c.name, "label": c.name, "description": c.description or ""}
             for c in bit_fc
         ],
         "produkt.hersteller": [

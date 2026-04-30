@@ -216,8 +216,33 @@
           {% set enum_opts = field.enum_values | from_json if field.enum_values else [] %}
           {% set dynamic_opts = picklists.get(fkey) if picklists is defined else None %}
           {% set selected_vals = current_val.split(',') if current_val else [] %}
+          {% if dynamic_opts is not none and fkey == 'stammdaten.bit_fc' %}
+          {# BIT/FC categories: render as 2-column card grid with name + description #}
+          <div id="input-{{ fkey_safe }}" class="grid grid-cols-1 lg:grid-cols-2 gap-2 mt-1">
+            {% for opt in dynamic_opts %}
+            {% set is_checked = opt.value in selected_vals %}
+            <label class="flex items-start gap-2 border rounded-lg p-2.5 cursor-pointer transition-colors
+                          {% if is_checked %}border-indigo-500 bg-indigo-50{% else %}border-gray-200 hover:border-indigo-300 bg-white{% endif %}">
+              <input
+                type="checkbox"
+                name="{{ fkey }}"
+                value="{{ opt.value }}"
+                data-field-key="{{ fkey }}"
+                {% if is_checked %}checked{% endif %}
+                onchange="saveMultiCheck('{{ fkey }}', '{{ req.id }}')"
+                class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+              />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-gray-800 truncate">{{ opt.label }}</div>
+                {% if opt.description %}
+                <div class="text-xs text-gray-500 leading-snug mt-0.5">{{ opt.description }}</div>
+                {% endif %}
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+          {% elif dynamic_opts is not none %}
           <div id="input-{{ fkey_safe }}" class="space-y-1 mt-1">
-            {% if dynamic_opts is not none %}
             {% for opt in dynamic_opts %}
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -232,7 +257,9 @@
               <span class="text-sm text-gray-700">{{ opt.label }}</span>
             </label>
             {% endfor %}
-            {% else %}
+          </div>
+          {% else %}
+          <div id="input-{{ fkey_safe }}" class="space-y-1 mt-1">
             {% for opt in enum_opts %}
             <label class="flex items-center gap-2 cursor-pointer">
               <input
@@ -247,8 +274,8 @@
               <span class="text-sm text-gray-700">{{ opt }}</span>
             </label>
             {% endfor %}
-            {% endif %}
           </div>
+          {% endif %}
 
           {% elif field.input_type == 'FILE' %}
           <div class="mt-1">
