@@ -214,8 +214,12 @@ info "=== Setting up Python virtual environment ==="
 install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.cache"
 install -d -o sysintro -g sysintro -m 750 "$SYSINTRO_HOME/.cache/pip"
 
-# Run pip with HOME pointing to a writable dir + explicit cache dir
-PIP_ENV=(env "HOME=$SYSINTRO_HOME" "PIP_CACHE_DIR=$SYSINTRO_HOME/.cache/pip")
+# Run pip with HOME pointing to a writable dir + explicit cache dir.
+# PYO3_USE_ABI3_FORWARD_COMPATIBILITY allows pydantic-core to build on
+# Python 3.14 even though PyO3 0.24 officially supports up to 3.13. It
+# uses the stable ABI which is forward-compatible. Drop this once PyO3
+# updates and pydantic-core ships a 3.14 wheel.
+PIP_ENV=(env "HOME=$SYSINTRO_HOME" "PIP_CACHE_DIR=$SYSINTRO_HOME/.cache/pip" "PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1")
 
 sudo -u sysintro "${PIP_ENV[@]}" python3 -m venv "$SYSINTRO_HOME/venv"
 sudo -u sysintro "${PIP_ENV[@]}" "$SYSINTRO_HOME/venv/bin/pip" install --upgrade pip wheel --quiet
