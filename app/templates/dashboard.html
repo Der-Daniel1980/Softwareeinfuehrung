@@ -71,9 +71,17 @@
     {% set my_pending = requests | selectattr('requester_id', 'equalto', user.id) | selectattr('status', 'in', ['SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED']) | list if requests is defined else [] %}
     {% if my_pending %}
     <div id="meine-rueckfragen" class="mt-6 space-y-4">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-semibold text-gray-700">Meine Anträge in Prüfung</h3>
         <span class="text-xs text-gray-500">{{ my_pending | length }} aktiv</span>
+      </div>
+      {# Farb-Legende für die Reviewer-Chips: erklärt was die Farben pro Rolle bedeuten. #}
+      <div class="flex flex-wrap gap-2 text-[11px] text-gray-600 -mt-1">
+        <span class="inline-flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400"></span>fertig</span>
+        <span class="inline-flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>Rückfrage offen</span>
+        <span class="inline-flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-red-400"></span>abgelehnt</span>
+        <span class="inline-flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-400"></span>in Bearbeitung</span>
+        <span class="inline-flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300"></span>nicht gestartet</span>
       </div>
 
       {% for req in my_pending %}

@@ -5,34 +5,49 @@
      compact     – bool (default False). Wenn True → noch kürzere Darstellung
                    (nur Code + offen/done), ohne "Felder zuständig"-Wort.
 #}
+{# Farb-Logik (Priorität von oben nach unten):
+   1. Abgelehnt              → ROT       (✗)  – blockierend, sofort sichtbar
+   2. Offene Rückfragen      → GELB      (💬) – wartet auf Antwort
+   3. Alles freigegeben      → GRÜN      (✓)  – fertig
+   4. Teilweise freigegeben  → BLAU      (◐)  – in Bearbeitung
+   5. Nichts angefangen      → GRAU      (○)  – noch nicht gestartet
+#}
 {% if progress %}
 <div class="flex flex-wrap gap-1.5 {% if compact %}text-[10px]{% else %}text-xs{% endif %}">
   {% for r in progress %}
-    {% if r.rejected > 0 %}
-      {% set bg = 'bg-red-100 text-red-800 border-red-200' %}{% set sym = '✗' %}
-    {% elif r.open == 0 and r.in_review == 0 and r.approved > 0 %}
-      {% set bg = 'bg-emerald-100 text-emerald-800 border-emerald-200' %}{% set sym = '✓' %}
-    {% elif r.in_review > 0 %}
-      {% set bg = 'bg-blue-100 text-blue-800 border-blue-200' %}{% set sym = '⏳' %}
-    {% elif r.approved > 0 %}
-      {% set bg = 'bg-amber-100 text-amber-800 border-amber-200' %}{% set sym = '◐' %}
-    {% else %}
-      {% set bg = 'bg-gray-100 text-gray-600 border-gray-200' %}{% set sym = '○' %}
-    {% endif %}
     {% set _open = r.open + r.in_review %}
+    {% if r.rejected > 0 %}
+      {% set bg = 'bg-red-100 text-red-800 border-red-300 ring-1 ring-red-200' %}
+      {% set sym = '✗' %}
+      {% set label = r.rejected ~ ' abgelehnt' %}
+    {% elif r.open_questions and r.open_questions > 0 %}
+      {% set bg = 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-200' %}
+      {% set sym = '💬' %}
+      {% set label = r.open_questions ~ ' Rückfr.' %}
+    {% elif r.total > 0 and _open == 0 and r.approved == r.total %}
+      {% set bg = 'bg-emerald-100 text-emerald-800 border-emerald-300' %}
+      {% set sym = '✓' %}
+      {% set label = 'fertig' %}
+    {% elif r.approved > 0 and _open > 0 %}
+      {% set bg = 'bg-blue-100 text-blue-800 border-blue-200' %}
+      {% set sym = '◐' %}
+      {% set label = r.approved ~ '/' ~ r.total %}
+    {% elif r.in_review > 0 %}
+      {% set bg = 'bg-blue-100 text-blue-800 border-blue-200' %}
+      {% set sym = '⏳' %}
+      {% set label = _open ~ '/' ~ r.total %}
+    {% else %}
+      {% set bg = 'bg-gray-100 text-gray-600 border-gray-200' %}
+      {% set sym = '○' %}
+      {% set label = '0/' ~ r.total %}
+    {% endif %}
     <span
       class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-medium {{ bg }}"
-      title="{{ r.role_label }}: {{ r.approved }} freigegeben · {{ r.in_review }} in Prüfung · {{ r.rejected }} abgelehnt · {{ r.open }} offen (Total {{ r.total }} Felder)"
+      title="{{ r.role_label }}: {{ r.approved }} freigegeben · {{ r.in_review }} in Prüfung · {{ r.rejected }} abgelehnt · {{ r.open }} offen{% if r.open_questions %} · {{ r.open_questions }} Rückfragen{% endif %} (Total {{ r.total }} Felder)"
     >
       <span aria-hidden="true">{{ sym }}</span>
       <span class="font-semibold tracking-tight">{{ r.role_code }}</span>
-      {% if _open == 0 and r.rejected == 0 %}
-        <span class="opacity-80">fertig</span>
-      {% elif r.rejected > 0 %}
-        <span class="opacity-80">{{ r.rejected }} Rückfr.</span>
-      {% else %}
-        <span class="opacity-80">{{ _open }}/{{ r.total }}</span>
-      {% endif %}
+      <span class="opacity-80">{{ label }}</span>
     </span>
   {% endfor %}
 </div>
