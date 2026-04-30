@@ -1,0 +1,25 @@
+{# Zeigt offene Rückfragen pro Antrag direkt im Dashboard / in der Liste an,
+   ohne dass der Antrag erst geöffnet werden muss.
+
+   Erwartet:
+     progress  – Liste vom Service (siehe app.services.progress.role_progress)
+     req_id    – ID des Antrags, für den Tieflink-Anker zum Feld
+#}
+{% set has_questions = progress | selectattr('questions') | list %}
+{% if has_questions %}
+<div class="mt-2 space-y-1">
+  {% for r in progress if r.questions %}
+    {% for q in r.questions %}
+    <a
+      href="/requests/{{ req_id }}#fieldrow-{{ q.field_key|replace('.', '_') }}"
+      class="block text-[11px] leading-snug bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded px-2 py-1 transition-colors"
+    >
+      <span class="font-semibold text-amber-900">{{ r.role_code }}</span>
+      <span class="text-amber-700">zu</span>
+      <span class="font-medium text-amber-900">„{{ q.field_label }}":</span>
+      <span class="text-gray-700">{{ q.comment | truncate(140) }}</span>
+    </a>
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}

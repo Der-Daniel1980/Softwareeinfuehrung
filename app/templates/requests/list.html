@@ -92,11 +92,14 @@
             {% include "components/status_badge.html" %}
           </td>
           <td class="px-4 py-3 text-sm text-gray-600">{{ req.system_category or '—' }}</td>
-          <td class="px-4 py-3">
+          <td class="px-4 py-3 align-top">
             {% set progress = progress_by_id.get(req.id, []) if progress_by_id is defined else [] %}
             {% if progress %}
               {% with progress=progress, compact=True %}
                 {% include "partials/role_progress_chips.html" %}
+              {% endwith %}
+              {% with progress=progress, req_id=req.id %}
+                {% include "partials/role_questions_inline.html" %}
               {% endwith %}
             {% else %}
               <span class="text-xs text-gray-300">—</span>

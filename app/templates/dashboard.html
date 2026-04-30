@@ -78,11 +78,15 @@
         </thead>
         <tbody class="divide-y divide-gray-100">
           {% for req in my_pending %}
-          <tr class="table-row-hover">
+          {% set _prog = progress_by_id.get(req.id, []) %}
+          <tr class="table-row-hover align-top">
             <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ req.title }}</td>
             <td class="px-4 py-3">
-              {% with progress=progress_by_id.get(req.id, []), compact=True %}
+              {% with progress=_prog, compact=True %}
                 {% include "partials/role_progress_chips.html" %}
+              {% endwith %}
+              {% with progress=_prog, req_id=req.id %}
+                {% include "partials/role_questions_inline.html" %}
               {% endwith %}
             </td>
             <td class="px-4 py-3 text-xs text-gray-500">
@@ -136,8 +140,12 @@
             <td class="px-4 py-3 text-sm text-gray-600">{{ req.requester.name if req.requester else '—' }}</td>
             <td class="px-4 py-3 text-sm text-gray-600">{{ req.system_category or '—' }}</td>
             <td class="px-4 py-3">
-              {% with progress=progress_by_id.get(req.id, []), compact=True %}
+              {% set _prog = progress_by_id.get(req.id, []) %}
+              {% with progress=_prog, compact=True %}
                 {% include "partials/role_progress_chips.html" %}
+              {% endwith %}
+              {% with progress=_prog, req_id=req.id %}
+                {% include "partials/role_questions_inline.html" %}
               {% endwith %}
             </td>
             <td class="px-4 py-3 text-sm text-gray-500">

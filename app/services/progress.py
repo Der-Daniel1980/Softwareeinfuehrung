@@ -44,6 +44,7 @@ def role_progress(session: Session, req: ApplicationRequest) -> list[dict]:
             Role.code,
             Role.label,
             FieldDefinition.key,
+            FieldDefinition.label,
         )
         .join(Role, Role.id == FieldResponsibility.role_id)
         .join(FieldDefinition, FieldDefinition.id == FieldResponsibility.field_id)
@@ -60,12 +61,12 @@ def role_progress(session: Session, req: ApplicationRequest) -> list[dict]:
     }
 
     by_role: dict[str, dict] = {}
-    for role_id, code, label, field_key in rows:
+    for role_id, code, role_label, field_key, field_label in rows:
         slot = by_role.setdefault(
             code,
             {
                 "role_code": code,
-                "role_label": label or code,
+                "role_label": role_label or code,
                 "total": 0,
                 "approved": 0,
                 "rejected": 0,
@@ -73,6 +74,7 @@ def role_progress(session: Session, req: ApplicationRequest) -> list[dict]:
                 "open": 0,
                 "done": 0,
                 "open_questions": 0,
+                "questions": [],  # list of {field_key, field_label, status, comment}
             },
         )
         slot["total"] += 1
@@ -87,10 +89,26 @@ def role_progress(session: Session, req: ApplicationRequest) -> list[dict]:
             slot["done"] += 1
             if d.comment:
                 slot["open_questions"] += 1
+                slot["questions"].append(
+                    {
+                        "field_key": field_key,
+                        "field_label": field_label or field_key,
+                        "status": "REJECTED",
+                        "comment": d.comment,
+                    }
+                )
         elif d.status == "IN_REVIEW":
             slot["in_review"] += 1
             if d.comment:
                 slot["open_questions"] += 1
+                slot["questions"].append(
+                    {
+                        "field_key": field_key,
+                        "field_label": field_label or field_key,
+                        "status": "IN_REVIEW",
+                        "comment": d.comment,
+                    }
+                )
         else:
             slot["open"] += 1
 
