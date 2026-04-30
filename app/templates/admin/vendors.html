@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Herstellerverwaltung{% endblock %}
+
+{% block content %}
+{% set role_codes = user.role_codes() %}
+
+{% if 'ADMIN' not in role_codes %}
+<div class="max-w-xl mx-auto px-4 py-16 text-center">
+  <div class="text-5xl mb-4">🔒</div>
+  <h1 class="text-xl font-bold text-gray-800 mb-2">Kein Zugriff</h1>
+  <p class="text-gray-500">Diese Seite ist nur für Administratoren zugänglich.</p>
+  <a href="/" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">← Zurück zum Dashboard</a>
+</div>
+{% else %}
+
+<div class="max-w-7xl mx-auto px-4 py-8">
+
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Herstellerverwaltung</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Diese Liste füllt das Hersteller-Auswahlfeld in Anträgen. Antragsteller
+        können auch frei tippen — dann wird der Wert nur als Text gespeichert,
+        nicht in die Stammdaten aufgenommen.
+      </p>
+    </div>
+    <button
+      type="button"
+      onclick="document.getElementById('new-vendor-modal').classList.remove('hidden')"
+      class="inline-flex items-center gap-2 bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+    >
+      + Neuer Hersteller
+    </button>
+  </div>
+
+  <!-- Search -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+    <input
+      type="text"
+      id="vendor-search"
+      placeholder="Name oder Beschreibung suchen…"
+      oninput="filterTable('vendor-search', 'vendors-table')"
+      class="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+    />
+  </div>
+
+  <!-- Vendors table -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+    <table id="vendors-table" class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Beschreibung</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Website</th>
+          <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+          <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Aktionen</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for v in vendors %}
+        <tr class="table-row-hover" id="vendor-row-{{ v.id }}">
+          <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ v.name }}</td>
+          <td class="px-4 py-3 text-sm text-gray-600">
+            {{ v.description or '—' }}
+          </td>
+          <td class="px-4 py-3 text-sm">
+            {% if v.website %}
+            <a href="{{ v.website }}" target="_blank" rel="noopener" class="text-indigo-600 hover:underline">
+              {{ v.website|replace('https://', '')|replace('http://', '') }}
+            </a>
+            {% else %}
+            <span class="text-gray-400">—</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3">
+            {% if v.is_active %}
+            <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">Aktiv</span>
+            {% else %}
+            <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-medium">Deaktiviert</span>
+            {% endif %}
+          </td>
+          <td class="px-4 py-3 text-right text-sm space-x-2">
+            {% if v.is_active %}
+            <button
+              type="button"
+              onclick="deactivateVendor({{ v.id }}, '{{ v.name|escape }}')"
+              class="text-xs text-red-600 hover:text-red-800 font-medium"
+            >Deaktivieren</button>
+            {% else %}
+            <button
+              type="button"
+              onclick="reactivateVendor({{ v.id }})"
+              class="text-xs text-green-700 hover:text-green-900 font-medium"
+            >Reaktivieren</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="text-center py-12 text-gray-400 text-sm">Keine Hersteller eingetragen.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="mt-4 text-xs text-gray-400">
+    {{ vendors|length }} Hersteller in Stammdaten ·
+    {{ vendors|selectattr('is_active')|list|length }} aktiv
+  </p>
+
+</div>
+
+<!-- New vendor modal -->
+<div id="new-vendor-modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-900">Neuer Hersteller</h2>
+      <button onclick="document.getElementById('new-vendor-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+    <form onsubmit="event.preventDefault(); createVendor();" class="space-y-4">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
+        <input type="text" id="new-vendor-name" required maxlength="120"
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Beschreibung</label>
+        <textarea id="new-vendor-desc" rows="3" maxlength="500"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"></textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Website</label>
+        <input type="url" id="new-vendor-website" placeholder="https://…" maxlength="255"
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="document.getElementById('new-vendor-modal').classList.add('hidden')"
+                class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Abbrechen</button>
+        <button type="submit" class="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg text-sm font-medium">Anlegen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  function csrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.content : '';
+  }
+  async function createVendor() {
+    const name = document.getElementById('new-vendor-name').value.trim();
+    if (!name) return;
+    const body = {
+      name,
+      description: document.getElementById('new-vendor-desc').value.trim() || null,
+      website: document.getElementById('new-vendor-website').value.trim() || null,
+    };
+    const r = await fetch('/api/v1/vendors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      window.location.reload();
+    } else {
+      const err = await r.json().catch(() => ({}));
+      alert('Fehler: ' + (err.detail || r.status));
+    }
+  }
+  async function deactivateVendor(id, name) {
+    if (!confirm(`Hersteller "${name}" deaktivieren?\nWird in der Auswahl in Anträgen ausgeblendet, aber bestehende Anträge bleiben unverändert.`)) return;
+    const r = await fetch('/api/v1/vendors/' + id, {
+      method: 'DELETE',
+      headers: { 'X-CSRF-Token': csrfToken() },
+    });
+    if (r.ok) window.location.reload();
+    else alert('Fehler: ' + r.status);
+  }
+  async function reactivateVendor(id) {
+    const r = await fetch('/api/v1/vendors/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
+      body: JSON.stringify({ is_active: true }),
+    });
+    if (r.ok) window.location.reload();
+    else alert('Fehler: ' + r.status);
+  }
+</script>
+
+{% endif %}
+{% endblock %}

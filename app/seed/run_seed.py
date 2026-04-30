@@ -26,6 +26,7 @@ def main() -> None:
     from app.seed.roles import seed_roles
     from app.seed.system_categories import seed_system_categories
     from app.seed.users import seed_users
+    from app.seed.vendors import seed_vendors
 
     session = SessionLocal()
     try:
@@ -47,6 +48,9 @@ def main() -> None:
 
         print("Seeding fields...")
         seed_fields(session)
+
+        print("Seeding vendors...")
+        seed_vendors(session)
 
         session.commit()
         print("Seed complete.")

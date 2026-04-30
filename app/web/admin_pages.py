@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth_deps import require_admin, require_admin_or_auditor
 from app.database import get_db
-from app.models import AuditLog, User
+from app.models import AuditLog, User, Vendor
 from app.web.templates import templates
 
 router = APIRouter(prefix="/admin", tags=["web-admin"])
@@ -21,6 +21,19 @@ async def admin_users(
     users = db.query(User).all()
     return templates.TemplateResponse(
         "admin/users.html", {"request": request, "user": user, "users": users}
+    )
+
+
+@router.get("/vendors", response_class=HTMLResponse)
+async def admin_vendors(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+) -> HTMLResponse:
+    vendors = db.query(Vendor).order_by(Vendor.name).all()
+    return templates.TemplateResponse(
+        "admin/vendors.html",
+        {"request": request, "user": user, "vendors": vendors},
     )
 
 

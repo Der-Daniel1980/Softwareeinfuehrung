@@ -16,6 +16,7 @@ from app.models.request import (
 from app.models.revision import Revision
 from app.models.role import Role
 from app.models.user import User, user_roles
+from app.models.vendor import Vendor
 
 __all__ = [
     "Base",
@@ -38,4 +39,5 @@ __all__ = [
     "Reminder",
     "AuditLog",
     "Notification",
+    "Vendor",
 ]

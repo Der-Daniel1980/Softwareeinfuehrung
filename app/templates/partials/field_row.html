@@ -129,7 +129,44 @@
           {% set enum_opts = field.enum_values | from_json if field.enum_values else [] %}
           {% set dynamic_opts = picklists.get(fkey) if picklists is defined else None %}
 
-          {% if dynamic_opts is not none %}
+          {% if fkey == 'system_category.code' and system_categories is defined and system_categories %}
+          {# System category: render as radio cards with full descriptions inline #}
+          <div id="input-{{ fkey_safe }}" class="space-y-2">
+            {% for cat in system_categories %}
+            <label class="block border rounded-lg p-3 cursor-pointer transition-colors
+                          {% if current_val == cat.code %}border-indigo-500 bg-indigo-50{% else %}border-gray-200 hover:border-indigo-300 bg-white{% endif %}">
+              <div class="flex items-start gap-3">
+                <input
+                  type="radio"
+                  name="{{ fkey }}"
+                  value="{{ cat.code }}"
+                  data-field-key="{{ fkey }}"
+                  {% if current_val == cat.code %}checked{% endif %}
+                  hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
+                  hx-trigger="change"
+                  hx-vals='{"value": "{{ cat.code }}"}'
+                  hx-swap="none"
+                  class="mt-1 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-900">{{ cat.code }}</span>
+                    <span class="text-sm font-semibold text-gray-700">{{ cat.label }}</span>
+                    {% if cat.requires_bv_attachment %}
+                    <span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">BV-Anhang Pflicht</span>
+                    {% endif %}
+                    {% if cat.expedited %}
+                    <span class="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">Notfall / Vier-Augen</span>
+                    {% endif %}
+                  </div>
+                  <p class="text-xs text-gray-600 mt-1 leading-relaxed">{{ cat.description }}</p>
+                </div>
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+
+          {% elif dynamic_opts is not none %}
           {# Combo box: select from list OR type free text. Future Keycloak/EntraID
              integration only needs to repopulate `picklists` server-side. #}
           <input

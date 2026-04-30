@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.core.auth_deps import get_current_user
 from app.database import get_db
-from app.models import ApplicationRequest, BitFcCategory, FieldDefinition, Revision, User
+from app.models import (
+    ApplicationRequest,
+    BitFcCategory,
+    FieldDefinition,
+    Revision,
+    SystemCategoryDefinition,
+    User,
+    Vendor,
+)
 from app.services import responsibility, workflow
 from app.web.templates import templates
 
@@ -21,6 +29,9 @@ def _picklist_options(db: Session) -> dict[str, list[dict]]:
     can enter a colleague's name even if they don't have an account yet.
     Future Keycloak / Entra ID integration would replace the User query with a
     directory lookup but the template does not need to change.
+
+    For produkt.hersteller the list comes from the active Vendor master-data
+    (managed under /admin/vendors). Free text remains accepted.
     """
     users = (
         db.query(User)
@@ -29,6 +40,12 @@ def _picklist_options(db: Session) -> dict[str, list[dict]]:
         .all()
     )
     bit_fc = db.query(BitFcCategory).order_by(BitFcCategory.name).all()
+    vendors = (
+        db.query(Vendor)
+        .filter(Vendor.is_active.is_(True))
+        .order_by(Vendor.name)
+        .all()
+    )
     return {
         "stammdaten.application_owner": [
             {"value": u.name, "label": f"{u.name} ({u.email})"} for u in users
@@ -40,7 +57,19 @@ def _picklist_options(db: Session) -> dict[str, list[dict]]:
             {"value": c.name, "label": c.name + (f" – {c.description}" if c.description else "")}
             for c in bit_fc
         ],
+        "produkt.hersteller": [
+            {"value": v.name, "label": v.name + (f" – {v.description}" if v.description else "")}
+            for v in vendors
+        ],
     }
+
+
+def _system_category_definitions(db: Session) -> list[SystemCategoryDefinition]:
+    return (
+        db.query(SystemCategoryDefinition)
+        .order_by(SystemCategoryDefinition.code)
+        .all()
+    )
 
 router = APIRouter(prefix="/requests", tags=["web-requests"])
 
@@ -113,6 +142,7 @@ async def request_detail(
             "field_values": field_values,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
+            "system_categories": _system_category_definitions(db),
         },
     )
 
@@ -143,6 +173,7 @@ async def request_review(
             "decisions": decisions,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
+            "system_categories": _system_category_definitions(db),
         },
     )
 

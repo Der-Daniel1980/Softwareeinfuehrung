@@ -23,6 +23,7 @@ from app.api import reminders as reminders_api
 from app.api import requests as requests_api
 from app.api import revisions as revisions_api
 from app.api import users as users_api
+from app.api import vendors as vendors_api
 from app.config import settings
 from app.core.errors import generic_exception_handler
 from app.scheduler import start_scheduler, stop_scheduler
@@ -109,6 +110,7 @@ app.include_router(revisions_api.router, prefix=API_PREFIX)
 app.include_router(catalog_api.router, prefix=API_PREFIX)
 app.include_router(audit_api.router, prefix=API_PREFIX)
 app.include_router(reminders_api.router, prefix=API_PREFIX)
+app.include_router(vendors_api.router, prefix=API_PREFIX)
 
 # Web routes
 app.include_router(auth_pages.router)
