@@ -242,8 +242,16 @@ UV_ENV=(env
 info "Installing Python 3.13 via uv..."
 sudo -u sysintro "${UV_ENV[@]}" uv python install 3.13
 
-# Create venv with that Python; --seed installs pip into the venv too
-sudo -u sysintro "${UV_ENV[@]}" uv venv --python 3.13 --seed "$SYSINTRO_HOME/venv"
+# Create venv with that Python; --seed installs pip into the venv too.
+# --allow-existing makes the call idempotent; if the venv already exists with
+# the right Python it's reused, otherwise we recreate.
+if [[ -x "$SYSINTRO_HOME/venv/bin/python" ]] \
+    && "$SYSINTRO_HOME/venv/bin/python" --version 2>&1 | grep -q "Python 3.13"; then
+    info "venv already exists at $SYSINTRO_HOME/venv with Python 3.13 — reusing"
+else
+    rm -rf "$SYSINTRO_HOME/venv"
+    sudo -u sysintro "${UV_ENV[@]}" uv venv --python 3.13 --seed "$SYSINTRO_HOME/venv"
+fi
 
 # Install dependencies via uv pip (significantly faster than pip)
 info "Installing Python dependencies (this may take 1-2 min)..."
