@@ -112,6 +112,19 @@
     <!-- Main content -->
     <div class="flex-1 min-w-0">
 
+      {% if role_progress %}
+      <!-- Reviewer-Übersicht: gleicher Block wie im Edit-Modus, kompakte Chip-Leiste -->
+      <div class="mb-4 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-3">
+          <p class="text-sm font-semibold text-gray-800">Reviewer-Status auf einen Blick</p>
+          <span class="text-xs text-gray-400">Hover für Details</span>
+        </div>
+        {% with progress=role_progress, compact=False %}
+          {% include "partials/role_progress_chips.html" %}
+        {% endwith %}
+      </div>
+      {% endif %}
+
       {% for sec in sections %}
       {% set section_name = sec.section %}
       {% set fields = sec.fields %}

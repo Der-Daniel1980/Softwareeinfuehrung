@@ -17,6 +17,7 @@ from app.models import (
     User,
     Vendor,
 )
+from app.services import progress as progress_svc
 from app.services import responsibility, workflow
 from app.web.templates import templates
 
@@ -82,9 +83,22 @@ async def requests_list(
 ) -> HTMLResponse:
     all_reqs = db.query(ApplicationRequest).all()
     visible = [r for r in all_reqs if workflow.can_view(r, user)]
+    # Per-request progress so the list can show "BR 2/4 offen · DSB ✓ ..." inline.
+    # Skipped for DRAFTs (no review activity yet) to keep the list fast.
+    progress_by_id = {
+        r.id: progress_svc.role_progress(db, r)
+        for r in visible
+        if r.status != "DRAFT"
+    }
     return templates.TemplateResponse(
         "requests/list.html",
-        {"request": request, "user": user, "requests": visible, "now": datetime.utcnow},
+        {
+            "request": request,
+            "user": user,
+            "requests": visible,
+            "progress_by_id": progress_by_id,
+            "now": datetime.utcnow,
+        },
     )
 
 
@@ -134,6 +148,7 @@ async def request_detail(
     # Reviewer decisions are surfaced to the requester in edit mode so that
     # any 'Rückfrage' comment is visible inline next to the original field.
     decisions = {(d.field_key, d.role_id): d for d in req.decisions}
+    role_prog = progress_svc.role_progress(db, req) if req.status != "DRAFT" else []
     return templates.TemplateResponse(
         "requests/edit.html",
         {
@@ -144,6 +159,7 @@ async def request_detail(
             "all_fields": all_fields,
             "field_values": field_values,
             "decisions": decisions,
+            "role_progress": role_prog,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
             "system_categories": _system_category_definitions(db),
@@ -166,6 +182,7 @@ async def request_review(
     field_values = {fv.field_key: fv.value_text for fv in req.field_values}
     # decisions keyed by (field_key, role_id)
     decisions = {(d.field_key, d.role_id): d for d in req.decisions}
+    role_prog = progress_svc.role_progress(db, req)
     return templates.TemplateResponse(
         "requests/review.html",
         {
@@ -175,6 +192,7 @@ async def request_review(
             "sections": sections,
             "field_values": field_values,
             "decisions": decisions,
+            "role_progress": role_prog,
             "role_codes": role_codes,
             "picklists": _picklist_options(db),
             "system_categories": _system_category_definitions(db),

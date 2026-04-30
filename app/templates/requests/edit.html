@@ -137,7 +137,9 @@
               {% elif d and d.status == 'REJECTED' %}{% set _ = stats.update({'rejected': stats.rejected + 1}) %}
               {% elif d and d.status == 'IN_REVIEW' %}{% set _ = stats.update({'in_review': stats.in_review + 1}) %}
               {% else %}{% set _ = stats.update({'open': stats.open + 1}) %}{% endif %}
-              {% if d and d.comment %}
+              {# 'Rückfrage' = Kommentar zu REJECTED oder IN_REVIEW.
+                 Approval-Kommentare sind reine Anmerkungen, keine offenen Fragen. #}
+              {% if d and d.comment and d.status in ('REJECTED', 'IN_REVIEW') %}
                 {% set _ = stats.comments.append({'field_label': f.label, 'field_key': f.key, 'status': d.status, 'comment': d.comment, 'decider': d.decider.name if d.decider else '—'}) %}
               {% endif %}
             {% endfor %}
