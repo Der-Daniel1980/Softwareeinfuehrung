@@ -198,6 +198,7 @@ done
 # ---------------------------------------------------------------------------
 info "=== Syncing application code ==="
 rsync -a --delete \
+    --exclude='.env' \
     --exclude='.venv' \
     --exclude='__pycache__' \
     --exclude='.git' \
