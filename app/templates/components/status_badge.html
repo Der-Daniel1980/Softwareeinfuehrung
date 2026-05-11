@@ -11,6 +11,8 @@
   <span class="badge bg-amber-100 text-amber-700">{{ status_val }}</span>
 {% elif status_val == 'PROVISIONALLY_APPROVED' %}
   <span class="badge bg-orange-100 text-orange-700">{{ status_val }}</span>
+{% elif status_val == 'WITHDRAWN' %}
+  <span class="badge bg-slate-200 text-slate-700">ZURÜCKGEZOGEN</span>
 {% elif status_val == 'ACKNOWLEDGED' %}
   <span class="badge bg-slate-100 text-slate-700">{{ status_val }}</span>
 {% else %}

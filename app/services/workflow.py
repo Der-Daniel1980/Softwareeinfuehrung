@@ -51,12 +51,52 @@ def can_view(req: ApplicationRequest, user: User) -> bool:
 
 
 def can_edit(req: ApplicationRequest, user: User) -> bool:
+    """Wer darf welches Feld noch ändern.
+
+    DRAFT/CHANGES_REQUESTED = uneingeschränkte Bearbeitung wie bisher.
+    SUBMITTED/IN_REVIEW     = Antragsteller darf weiterhin Felder pflegen
+                              (z. B. Reaktion auf Rückfragen ohne BLOCKER-
+                              Workflow). Jede Änderung wird in `revisions`
+                              protokolliert, damit Reviewer den vorherigen
+                              Stand jederzeit nachvollziehen können.
+    APPROVED/REJECTED/WITHDRAWN = endgültig, schreibgeschützt.
+    """
     if user.has_role("ADMIN"):
         return True
-    return req.requester_id == user.id and req.status in (
+    if req.requester_id != user.id:
+        return False
+    return req.status in (
         RequestStatus.DRAFT.value,
         RequestStatus.CHANGES_REQUESTED.value,
+        RequestStatus.SUBMITTED.value,
+        RequestStatus.IN_REVIEW.value,
     )
+
+
+def can_withdraw(req: ApplicationRequest, user: User) -> bool:
+    """Antragsteller (oder ADMIN) darf einen noch offenen Antrag zurückziehen."""
+    if user.has_role("ADMIN"):
+        return req.status not in (
+            RequestStatus.APPROVED.value,
+            RequestStatus.WITHDRAWN.value,
+        )
+    if req.requester_id != user.id:
+        return False
+    return req.status in (
+        RequestStatus.SUBMITTED.value,
+        RequestStatus.IN_REVIEW.value,
+        RequestStatus.CHANGES_REQUESTED.value,
+        RequestStatus.PROVISIONALLY_APPROVED.value,
+    )
+
+
+def can_delete(req: ApplicationRequest, user: User) -> bool:
+    """Nur DRAFT-Anträge dürfen physisch gelöscht werden — und nur vom
+    Antragsteller selbst (oder ADMIN). Alles andere ist auditrelevant und
+    bleibt erhalten (siehe `withdraw`)."""
+    if req.status != RequestStatus.DRAFT.value:
+        return False
+    return user.has_role("ADMIN") or req.requester_id == user.id
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +176,13 @@ def submit(
 
 
 def _validate_required_fields(session: Session, req: ApplicationRequest) -> list[str]:
-    """Check that all unconditionally required fields have values."""
+    """Pflichtfelder validieren. Im POC-Modus werden nur Felder mit
+    `included_in_poc=True` betrachtet."""
 
-    fields = session.query(FieldDefinition).filter(FieldDefinition.is_required.is_(True)).all()
+    q = session.query(FieldDefinition).filter(FieldDefinition.is_required.is_(True))
+    if req.is_poc:
+        q = q.filter(FieldDefinition.included_in_poc.is_(True))
+    fields = q.all()
     fv_map = {fv.field_key: fv.value_text for fv in req.field_values}
     errors = []
     for field in fields:
@@ -154,21 +198,22 @@ def _validate_required_fields(session: Session, req: ApplicationRequest) -> list
 
 
 def _create_decisions(session: Session, req: ApplicationRequest) -> None:
-    """Create ApprovalDecision rows for every (F-field × F-role) combo."""
-    f_responsibilities = (
-        session.query(FieldResponsibility)
-        .filter(FieldResponsibility.kind == Responsibility.APPROVAL.value)
-        .all()
-    )
-    existing = {(d.field_key, d.role_id) for d in req.decisions}
-    field_map = {
-        fr.field_id: session.get(FieldDefinition, fr.field_id) for fr in f_responsibilities
-    }
+    """ApprovalDecision-Zeilen pro (F-Feld × F-Rolle) anlegen.
 
-    for fr in f_responsibilities:
-        field = field_map.get(fr.field_id)
-        if not field:
-            continue
+    Im POC-Workflow werden ausschließlich Felder mit `included_in_poc=True`
+    in den Reviewer-Workflow aufgenommen — der Sinn des POC ist gerade, dass
+    nicht alle Rollen jedes Detail prüfen müssen.
+    """
+    q = (
+        session.query(FieldResponsibility, FieldDefinition)
+        .join(FieldDefinition, FieldDefinition.id == FieldResponsibility.field_id)
+        .filter(FieldResponsibility.kind == Responsibility.APPROVAL.value)
+    )
+    if req.is_poc:
+        q = q.filter(FieldDefinition.included_in_poc.is_(True))
+
+    existing = {(d.field_key, d.role_id) for d in req.decisions}
+    for fr, field in q.all():
         if (field.key, fr.role_id) in existing:
             continue
         decision = ApprovalDecision(
@@ -413,3 +458,189 @@ def _notify_resubmit(session: Session, req: ApplicationRequest) -> None:
                 subject=f"Antrag erneut eingereicht: {req.title}",
                 body=f"Antrag #{req.id} wurde überarbeitet und wartet auf Ihre erneute Prüfung.",
             )
+
+
+# ---------------------------------------------------------------------------
+# Withdraw / Delete
+# ---------------------------------------------------------------------------
+
+
+def withdraw(
+    session: Session,
+    req: ApplicationRequest,
+    actor: User,
+    reason: str | None = None,
+) -> ApplicationRequest:
+    """Antragsteller zieht einen offenen Antrag zurück.
+
+    Status -> WITHDRAWN. Daten bleiben erhalten (Revisions-Historie weiter
+    sichtbar, Reviewer sehen den Antrag im Read-Only-Modus). Wir legen einen
+    Snapshot mit Begründung an, damit der Auditor nachvollziehen kann, in
+    welchem Zustand der Antrag zurückgezogen wurde.
+    """
+    if not can_withdraw(req, actor):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Antrag kann in diesem Status nicht zurückgezogen werden.",
+        )
+
+    req.status = RequestStatus.WITHDRAWN.value
+
+    summary = "Antrag zurückgezogen"
+    if reason:
+        summary = f"{summary}: {reason[:300]}"
+    revisions.snapshot(session, req, actor, summary)
+    audit.log(
+        session,
+        actor,
+        AuditAction.REQUEST_WITHDRAWN.value,
+        "ApplicationRequest",
+        str(req.id),
+        {"action": "withdraw", "reason": reason or ""},
+    )
+    session.flush()
+    return req
+
+
+def delete_draft(
+    session: Session,
+    req: ApplicationRequest,
+    actor: User,
+) -> None:
+    """Physisch löschen – nur für DRAFT.
+
+    Räumt alle abhängigen Tabellen mit, damit FK-Constraints nicht zuschnappen
+    und keine Karteileichen zurückbleiben.
+    """
+    if not can_delete(req, actor):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nur eigene Entwürfe können gelöscht werden.",
+        )
+
+    # Audit zuerst, danach gibt es das Objekt nicht mehr.
+    audit.log(
+        session,
+        actor,
+        AuditAction.REQUEST_DELETED.value,
+        "ApplicationRequest",
+        str(req.id),
+        {"action": "delete_draft", "title": req.title},
+    )
+
+    # Abhängigkeiten manuell – ORM-Cascade ist nicht überall gesetzt.
+    from app.models import (
+        ApprovalDecision as _AD,
+        Attachment as _Att,
+        Comment as _C,
+        FieldValue as _FV,
+        Reminder as _R,
+        Revision as _Rev,
+    )
+
+    session.query(_FV).filter(_FV.request_id == req.id).delete(synchronize_session=False)
+    session.query(_AD).filter(_AD.request_id == req.id).delete(synchronize_session=False)
+    session.query(_C).filter(_C.request_id == req.id).delete(synchronize_session=False)
+    session.query(_Att).filter(_Att.request_id == req.id).delete(synchronize_session=False)
+    session.query(_R).filter(_R.request_id == req.id).delete(synchronize_session=False)
+    session.query(_Rev).filter(_Rev.request_id == req.id).delete(synchronize_session=False)
+    # request_owner_deputies + request_bit_fc sind reine Verknüpfungstabellen
+    from sqlalchemy import text as _text
+    session.execute(
+        _text("DELETE FROM request_owner_deputies WHERE request_id = :rid"),
+        {"rid": req.id},
+    )
+    session.execute(
+        _text("DELETE FROM request_bit_fc WHERE request_id = :rid"),
+        {"rid": req.id},
+    )
+
+    session.delete(req)
+    session.flush()
+
+
+# ---------------------------------------------------------------------------
+# POC → Standard-Antrag promovieren
+# ---------------------------------------------------------------------------
+
+
+def promote_poc_to_standard(
+    session: Session,
+    poc_req: ApplicationRequest,
+    actor: User,
+) -> ApplicationRequest:
+    """Aus einem POC einen vollwertigen Standard-Antrag erzeugen.
+
+    Erzeugt eine Kopie des Antrags mit `is_poc=False`, übernimmt:
+    - alle Feldwerte (auch die, die im POC nicht abgefragt wurden – sie
+      bleiben einfach leer und können noch befüllt werden)
+    - Stamm-Daten (Title, Owner, IT-Owner, Beschreibung, Standort, Kategorie)
+    - BIT/FC-Verknüpfungen
+
+    Erzeugt KEIN Audit-Carry-Over für Decisions / Comments – der neue Antrag
+    durchläuft den vollständigen Reviewer-Workflow von vorn (das ist genau
+    der Punkt: das POC hatte einen verkürzten Workflow, jetzt muss der
+    Vollumfang geprüft werden).
+    """
+    if not poc_req.is_poc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nur POC-Anträge können zu Standard-Anträgen hochgestuft werden.",
+        )
+    if actor.id != poc_req.requester_id and not actor.has_role("ADMIN"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nur Antragsteller oder Admin dürfen einen POC promovieren.",
+        )
+
+    from app.models import FieldValue as _FV
+    from sqlalchemy import text as _text
+
+    new_req = ApplicationRequest(
+        title=poc_req.title,
+        requester_id=poc_req.requester_id,
+        status=RequestStatus.DRAFT.value,
+        system_category=poc_req.system_category,
+        application_owner_id=poc_req.application_owner_id,
+        it_application_owner_id=poc_req.it_application_owner_id,
+        short_description=poc_req.short_description,
+        installation_location=poc_req.installation_location,
+        is_poc=False,
+        promoted_from_poc_id=poc_req.id,
+        created_at=datetime.utcnow(),
+    )
+    session.add(new_req)
+    session.flush()
+
+    # Feldwerte 1:1 kopieren
+    for fv in poc_req.field_values:
+        session.add(
+            _FV(
+                request_id=new_req.id,
+                field_key=fv.field_key,
+                value_text=fv.value_text,
+                updated_by=actor.id,
+                updated_at=datetime.utcnow(),
+            )
+        )
+
+    # BIT/FC-Verknüpfungen
+    session.execute(
+        _text(
+            "INSERT INTO request_bit_fc (request_id, bit_fc_id) "
+            "SELECT :new_id, bit_fc_id FROM request_bit_fc WHERE request_id = :old_id"
+        ),
+        {"new_id": new_req.id, "old_id": poc_req.id},
+    )
+
+    revisions.snapshot(
+        session, new_req, actor,
+        f"Aus POC #{poc_req.id} promoviert",
+    )
+    audit.log(
+        session, actor, AuditAction.REQUEST_SUBMITTED.value,
+        "ApplicationRequest", str(new_req.id),
+        {"action": "promote_from_poc", "poc_id": poc_req.id},
+    )
+    session.flush()
+    return new_req

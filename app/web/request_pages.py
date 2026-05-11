@@ -136,12 +136,14 @@ async def request_new(
 async def request_new_submit(
     request: Request,
     title: str = Form(...),
+    is_poc: str | None = Form(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> HTMLResponse:
     req = ApplicationRequest(
         title=title,
         requester_id=user.id,
+        is_poc=bool(is_poc),
         created_at=datetime.utcnow(),
     )
     db.add(req)
@@ -170,6 +172,27 @@ async def request_detail(
     decisions = {(d.field_key, d.role_id): d for d in req.decisions}
     comments_by_field = _comments_by_field(db, req.id)
     role_prog = progress_svc.role_progress(db, req) if req.status != "DRAFT" else []
+    # Wenn der Antrag final ist (APPROVED/REJECTED/WITHDRAWN) oder der Nutzer
+    # ohnehin nicht bearbeiten darf, blenden wir den Edit-Wizard aus und zeigen
+    # die Read-Only-Reviewer-Sicht. So kann der Antragsteller alte Anträge
+    # nachschlagen, ohne versehentlich im Eingabe-Modus zu landen.
+    if not workflow.can_edit(req, user):
+        return templates.TemplateResponse(
+            "requests/review.html",
+            {
+                "request": request,
+                "user": user,
+                "req": req,
+                "sections": sections,
+                "field_values": field_values,
+                "decisions": decisions,
+                "comments_by_field": comments_by_field,
+                "role_progress": role_prog,
+                "role_codes": role_codes,
+                "picklists": _picklist_options(db),
+                "system_categories": _system_category_definitions(db),
+            },
+        )
     return templates.TemplateResponse(
         "requests/edit.html",
         {

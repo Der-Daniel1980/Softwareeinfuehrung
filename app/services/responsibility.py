@@ -91,8 +91,29 @@ def sections_for_request(
         session.query(FieldDefinition).order_by(FieldDefinition.sort_order).all()
     )
 
+    # POC-Modus: vereinfachter Antrag, der nur ausgewählte Felder zeigt.
+    # Ein Feld ist im POC sichtbar, wenn:
+    #   – `included_in_poc = True` ODER
+    #   – es ein Conditional-Trigger eines anderen included_in_poc-Feldes ist
+    #     (sonst hängt das bedingte Feld in der Luft).
+    is_poc = bool(getattr(req, "is_poc", False))
+    poc_keys: set[str] = set()
+    if is_poc:
+        poc_keys = {f.key for f in all_fields if f.included_in_poc}
+        # Trigger-Keys ergänzen, damit z. B. „Begründung Kategorie D" nicht
+        # ohne Auslöser ins Leere zeigt.
+        trigger_keys = {
+            f.conditional_on_key
+            for f in all_fields
+            if f.included_in_poc and f.conditional_on_key
+        }
+        poc_keys |= {k for k in trigger_keys if k}
+
     sections: dict[str, list[dict]] = {}
     for field in all_fields:
+        if is_poc and field.key not in poc_keys:
+            continue
+
         if is_privileged:
             editable = True
             visible = True

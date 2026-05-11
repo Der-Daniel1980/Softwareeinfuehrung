@@ -22,6 +22,11 @@ class FieldDefinition(Base):
     conditional_on_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     conditional_equals: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Wird das Feld im POC-Workflow abgefragt? Bei is_poc=True werden nur
+    # Felder mit included_in_poc=True angezeigt (plus deren Conditional-Trigger).
+    included_in_poc: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
 
     responsibilities: Mapped[List["FieldResponsibility"]] = relationship(
         "FieldResponsibility", back_populates="field", lazy="selectin"

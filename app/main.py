@@ -29,7 +29,15 @@ from app.core.errors import generic_exception_handler
 from app.scheduler import start_scheduler, stop_scheduler
 
 # Web routers
-from app.web import admin_pages, auth_pages, catalog_pages, dashboard, partials, request_pages
+from app.web import (
+    admin_field_pages,
+    admin_pages,
+    auth_pages,
+    catalog_pages,
+    dashboard,
+    partials,
+    request_pages,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -118,4 +126,5 @@ app.include_router(dashboard.router)
 app.include_router(request_pages.router)
 app.include_router(catalog_pages.router)
 app.include_router(admin_pages.router)
+app.include_router(admin_field_pages.router)
 app.include_router(partials.router)

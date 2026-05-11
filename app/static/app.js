@@ -24,7 +24,14 @@
     let msg = `Fehler ${status}`;
     try {
       const json = JSON.parse(text);
-      if (json.detail) msg = json.detail;
+      // formatDetail wird unten definiert. Falls noch nicht geladen, fallback
+      // auf simples String-Cast (vermeidet [object Object] für Strings, kann
+      // aber bei Objekten kurz seltsam aussehen).
+      if (json.detail !== undefined) {
+        msg = window.formatDetail
+          ? window.formatDetail(json.detail, msg)
+          : (typeof json.detail === 'string' ? json.detail : msg);
+      }
     } catch (_) {}
     showFlash('error', msg);
   });
@@ -55,6 +62,41 @@
   }
 
   window.showFlash = showFlash;
+
+  // ─── Detail-Formatter für API-Fehler ────────────────────────────────────────
+  // FastAPI-Routen liefern `detail` mal als String, mal als Objekt
+  // ({"errors": ["..."]}), mal als Pydantic-Validation-Array. Naives
+  // `String(detail)` ergibt dann das berüchtigte "[object Object]".
+  // Diese Helferfunktion zieht die menschlich lesbaren Informationen heraus.
+  function formatDetail(detail, fallback) {
+    if (detail == null) return fallback || '';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map(function (e) {
+          if (typeof e === 'string') return e;
+          if (e && typeof e === 'object') {
+            if (e.msg) return e.msg;
+          }
+          return JSON.stringify(e);
+        })
+        .join(' · ');
+    }
+    if (typeof detail === 'object') {
+      if (Array.isArray(detail.errors)) {
+        return formatDetail(detail.errors, fallback);
+      }
+      if (detail.message) return detail.message;
+      if (detail.detail) return formatDetail(detail.detail, fallback);
+      try {
+        return JSON.stringify(detail);
+      } catch (_) {
+        return fallback || '';
+      }
+    }
+    return fallback || '';
+  }
+  window.formatDetail = formatDetail;
 
   function escapeHtml(str) {
     return String(str)
@@ -193,10 +235,14 @@
   // ─── Pflichtfeld counter ────────────────────────────────────────────────────
   window.updateRequiredCounter = function () {
     const counter = document.getElementById('required-counter');
-    if (!counter) return;
+    const counterBottom = document.getElementById('footer-required-counter');
+    if (!counter && !counterBottom) return;
     let total = 0;
     let filled = 0;
     document.querySelectorAll('.required-field').forEach(function (wrapper) {
+      // Conditional-Felder zählen nur, wenn ihr Trigger erfüllt ist – sonst
+      // sind sie unsichtbar und stören die Pflichtfeld-Bilanz.
+      if (wrapper.style.display === 'none') return;
       total++;
       const inp = wrapper.querySelector('input:not([type=radio]):not([type=checkbox]), textarea, select');
       const radio = wrapper.querySelector('input[type=radio]:checked');
@@ -210,17 +256,26 @@
       }
     });
     const open = total - filled;
-    counter.textContent = `Noch ${open} von ${total} Pflichtfeldern offen`;
-    counter.className = open > 0
+    const text = `Noch ${open} von ${total} Pflichtfeldern offen`;
+    const cls = open > 0
       ? 'text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded'
       : 'text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded';
-
-    // Update submit button
-    const submitBtn = document.getElementById('submit-btn');
-    if (submitBtn) {
-      submitBtn.disabled = open > 0;
-      submitBtn.title = open > 0 ? `Noch ${open} Pflichtfeld(er) ausfüllen` : '';
+    if (counter) {
+      counter.textContent = text;
+      counter.className = cls;
     }
+    if (counterBottom) {
+      counterBottom.textContent = text;
+      counterBottom.className = cls;
+    }
+
+    // Submit-Buttons (oben + unten) synchron schalten.
+    ['submit-btn', 'submit-btn-bottom'].forEach(function (id) {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.disabled = open > 0;
+      btn.title = open > 0 ? `Noch ${open} Pflichtfeld(er) ausfüllen` : '';
+    });
   };
 
   // ─── Section checkmarks ─────────────────────────────────────────────────────

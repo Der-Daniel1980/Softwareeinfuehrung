@@ -12,6 +12,25 @@ def validate_for_submit(session: Session, req: ApplicationRequest) -> list[str]:
     """Return a list of validation error messages (empty = OK)."""
     errors: list[str] = []
 
+    # Self-Heal: Wenn die Spalte `system_category` leer ist, aber das
+    # entsprechende field_value bereits einen gültigen Wert enthält
+    # (Altdaten oder Race-Condition vor patch_field-Mirror), spiegeln wir
+    # ihn jetzt in die Spalte. So scheitert der Submit nicht mehr an einer
+    # rein technischen Lücke, die dem Nutzer nicht erklärbar wäre.
+    if not req.system_category:
+        from app.models import FieldValue
+        fv = (
+            session.query(FieldValue)
+            .filter(
+                FieldValue.request_id == req.id,
+                FieldValue.field_key == "system_category.code",
+            )
+            .first()
+        )
+        if fv and (fv.value_text or "").strip() in ("A", "B", "C", "D"):
+            req.system_category = fv.value_text.strip()
+            session.flush()
+
     if not req.system_category:
         errors.append("Systemkategorie (A/B/C/D) muss gesetzt sein.")
 

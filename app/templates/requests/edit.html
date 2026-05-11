@@ -18,6 +18,11 @@
         <div class="flex items-center gap-3 mt-1">
           {% set status = req.status %}
           {% include "components/status_badge.html" %}
+          {% if req.is_poc %}
+          <span class="badge bg-amber-100 text-amber-800 border border-amber-300" title="Proof of Concept – vereinfachter Workflow">
+            🧪 POC
+          </span>
+          {% endif %}
           <span class="text-xs text-gray-400">Erstellt: {{ req.created_at.strftime('%d.%m.%Y') }}</span>
           {% if req.submitted_at %}
           <span class="text-xs text-gray-400">Eingereicht: {{ req.submitted_at.strftime('%d.%m.%Y') }}</span>
@@ -40,9 +45,68 @@
         Einreichen
       </button>
       {% endif %}
+      {# Entwurf löschen — nur DRAFT, nur Antragsteller. #}
+      {% if req.status == 'DRAFT' and req.requester_id == user.id %}
+      <button
+        type="button"
+        onclick="deleteDraft({{ req.id }})"
+        class="text-xs text-red-600 hover:bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg transition-colors"
+        title="Entwurf endgültig löschen"
+      >
+        🗑 Entwurf löschen
+      </button>
+      {% endif %}
+      {# Antrag zurückziehen — solange noch nicht final entschieden. #}
+      {% if req.status in ['SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'PROVISIONALLY_APPROVED'] and req.requester_id == user.id %}
+      <button
+        type="button"
+        onclick="withdrawRequest({{ req.id }})"
+        class="text-xs text-amber-700 hover:bg-amber-50 border border-amber-300 px-3 py-1.5 rounded-lg transition-colors"
+        title="Antrag zurückziehen — bleibt im Verlauf erhalten"
+      >
+        ↩ Antrag zurückziehen
+      </button>
+      {% endif %}
+      {# POC zu Standard promovieren — nur für POC-Anträge mit Inhaber-Recht #}
+      {% if req.is_poc and req.requester_id == user.id %}
+      <button
+        type="button"
+        onclick="promotePoc({{ req.id }})"
+        class="text-xs text-emerald-700 hover:bg-emerald-50 border border-emerald-300 px-3 py-1.5 rounded-lg transition-colors"
+        title="POC zu vollwertigem Standard-Antrag hochstufen — alle Eingaben werden übernommen"
+      >
+        ⬆ Zu Standard-Antrag promovieren
+      </button>
+      {% endif %}
       <a href="/requests/{{ req.id }}/revisions" class="text-sm text-gray-500 hover:underline">Verlauf</a>
     </div>
   </div>
+
+  {% if req.status in ['SUBMITTED', 'IN_REVIEW'] and req.requester_id == user.id %}
+  <div class="mb-4 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl p-3 text-sm flex items-start gap-2">
+    <span class="text-blue-500">ℹ</span>
+    <span>
+      <strong>Antrag ist eingereicht.</strong> Sie können Felder weiterhin anpassen
+      (z. B. als Reaktion auf Rückfragen). Jede Änderung wird im
+      <a href="/requests/{{ req.id }}/revisions" class="underline font-medium">Verlauf</a>
+      mit dem vorherigen Wert protokolliert, sodass Reviewer den ursprünglichen
+      Stand jederzeit nachvollziehen können.
+    </span>
+  </div>
+  {% endif %}
+
+  {% if req.is_poc %}
+  <div class="mb-4 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl p-3 text-sm flex items-start gap-2">
+    <span class="text-amber-600 text-base">🧪</span>
+    <span>
+      <strong>Proof of Concept – vereinfachter Workflow.</strong>
+      Es werden nur die für einen POC relevanten Felder abgefragt; ausgewählte Reviewer-Rollen
+      prüfen verkürzt. Wenn das POC abgeschlossen ist, können Sie es per
+      <em>„⬆ Zu Standard-Antrag promovieren"</em> in einen vollwertigen Antrag überführen,
+      ohne die Daten neu eingeben zu müssen.
+    </span>
+  </div>
+  {% endif %}
 
   <div class="flex gap-6">
 
@@ -58,18 +122,21 @@
                                   rejected=0, decisions_total=0, decisions_done=0) %}
             {% for item in sec.fields %}
               {% set f = item.field %}
-              {% set ns.total = ns.total + 1 %}
-              {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
-              {% if f.is_required %}
-                {% set ns.req_total = ns.req_total + 1 %}
-                {% if field_values.get(f.key) %}{% set ns.req_filled = ns.req_filled + 1 %}{% endif %}
+              {% set _cond_active = (not f.conditional_on_key) or (field_values.get(f.conditional_on_key) == f.conditional_equals) %}
+              {% if _cond_active %}
+                {% set ns.total = ns.total + 1 %}
+                {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
+                {% if f.is_required %}
+                  {% set ns.req_total = ns.req_total + 1 %}
+                  {% if field_values.get(f.key) %}{% set ns.req_filled = ns.req_filled + 1 %}{% endif %}
+                {% endif %}
+                {% for resp in f.responsibilities if resp.kind == 'APPROVAL' %}
+                  {% set ns.decisions_total = ns.decisions_total + 1 %}
+                  {% set d = decisions.get((f.key, resp.role_id)) %}
+                  {% if d and d.status == 'REJECTED' %}{% set ns.rejected = ns.rejected + 1 %}{% endif %}
+                  {% if d and d.status in ('APPROVED', 'REJECTED') %}{% set ns.decisions_done = ns.decisions_done + 1 %}{% endif %}
+                {% endfor %}
               {% endif %}
-              {% for resp in f.responsibilities if resp.kind == 'APPROVAL' %}
-                {% set ns.decisions_total = ns.decisions_total + 1 %}
-                {% set d = decisions.get((f.key, resp.role_id)) %}
-                {% if d and d.status == 'REJECTED' %}{% set ns.rejected = ns.rejected + 1 %}{% endif %}
-                {% if d and d.status in ('APPROVED', 'REJECTED') %}{% set ns.decisions_done = ns.decisions_done + 1 %}{% endif %}
-              {% endfor %}
             {% endfor %}
             {% set submitted = req.status not in ['DRAFT'] %}
             {% if ns.rejected > 0 %}
@@ -125,6 +192,8 @@
         {% for sec in sections %}
           {% for item in sec.fields %}
             {% set f = item.field %}
+            {% set _cond_active = (not f.conditional_on_key) or (field_values.get(f.conditional_on_key) == f.conditional_equals) %}
+            {% if _cond_active %}
             {% for resp in f.responsibilities if resp.kind == 'APPROVAL' %}
               {% set rcode = resp.role.code %}
               {% if rcode not in role_stats %}
@@ -143,6 +212,7 @@
                 {% set _ = stats.comments.append({'field_label': f.label, 'field_key': f.key, 'status': d.status, 'comment': d.comment, 'decider': d.decider.name if d.decider else '—'}) %}
               {% endif %}
             {% endfor %}
+            {% endif %}
           {% endfor %}
         {% endfor %}
 
@@ -256,6 +326,46 @@
       {% include "requests/_section.html" %}
       {% endfor %}
 
+      {# ──────────────────────────────────────────────────────────────────
+         Aktionsleiste am Ende des Formulars: spiegelt die Aktionen aus
+         dem Header, damit Nutzer nach langem Scrollen nicht erst nach
+         oben müssen. Im Verlauf wird hier gespeichert/eingereicht.
+         ────────────────────────────────────────────────────────────── #}
+      <div class="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="text-sm text-gray-600">
+            <span id="footer-required-counter" class="font-medium"></span>
+            <span id="footer-save-status" class="ml-3 text-xs text-gray-400"></span>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            {% if req.status in ['DRAFT', 'SUBMITTED', 'IN_REVIEW', 'CHANGES_REQUESTED'] and req.requester_id == user.id %}
+            <button
+              type="button"
+              onclick="saveDraftManually({{ req.id }})"
+              class="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold px-4 py-2 rounded-lg text-sm transition-colors"
+              title="Alle aktuell sichtbaren Eingaben sofort speichern"
+            >
+              💾 Speichern
+            </button>
+            {% endif %}
+            {% if req.status in ['DRAFT', 'CHANGES_REQUESTED'] and req.requester_id == user.id %}
+            <button
+              id="submit-btn-bottom"
+              type="button"
+              disabled
+              title="Alle Pflichtfelder ausfüllen"
+              onclick="submitRequest({{ req.id }})"
+              class="bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-5 py-2 rounded-lg text-sm transition-colors"
+            >
+              ✓ Einreichen
+            </button>
+            {% endif %}
+            <a href="#" onclick="window.scrollTo({top:0, behavior:'smooth'}); return false;"
+               class="text-xs text-gray-500 hover:text-gray-800">↑ Nach oben</a>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -263,6 +373,25 @@
 
 {% block extra_scripts %}
 <script>
+// Klappe den Konversations-Thread eines Feldes auf, scrolle hin und
+// fokussiere das Antwort-Textfeld. Wird vom „Auf Rückfrage antworten"-Button
+// im Status-Block aufgerufen, damit der Antragsteller mit EINEM Klick in der
+// passenden Eingabezeile landet – statt die Konversations-Sektion erst
+// manuell aufklappen zu müssen.
+window.openFieldThread = function(fieldSafe) {
+  var container = document.getElementById('thread-' + fieldSafe);
+  if (!container) return;
+  var details = container.querySelector('details');
+  if (details && !details.open) details.open = true;
+  var ta = document.getElementById('reply-' + fieldSafe);
+  // Smooth-scroll so kontext bleibt sichtbar (Rückfrage steht oberhalb).
+  container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (ta) {
+    // Fokus erst nach dem Scroll, damit das Smooth-Scroll nicht abgebrochen wird.
+    setTimeout(function() { ta.focus(); }, 350);
+  }
+};
+
 // Submit a per-field comment / Rückfrage and append it to the thread.
 window.submitComment = function(ev, form, reqId, fieldKey, fieldSafe) {
   ev.preventDefault();
@@ -339,13 +468,136 @@ function saveMultiCheck(fieldKey, reqId) {
 }
 
 // Submit request
-function submitRequest(reqId) {
+// Manueller Speicher-Button (Footer): zwingt alle aktuell sichtbaren
+// Eingaben (TEXT/LONGTEXT/NUMBER/DATE/PICKLIST) sofort an den Server. ENUM-
+// und Checkbox-Felder werden bereits onChange gespeichert; wir nehmen sie der
+// Vollständigkeit halber trotzdem mit.
+async function saveDraftManually(reqId) {
+  var status = document.getElementById('footer-save-status');
+  if (status) { status.textContent = 'Speichere…'; status.className = 'ml-3 text-xs text-amber-600'; }
+  try {
+    await flushPendingFieldEdits(reqId);
+    if (status) {
+      status.textContent = '✓ Gespeichert';
+      status.className = 'ml-3 text-xs text-emerald-600';
+      setTimeout(function () { status.textContent = ''; }, 3000);
+    }
+    if (window.showFlash) showFlash('success', 'Entwurf gespeichert.');
+    if (window.updateRequiredCounter) window.updateRequiredCounter();
+  } catch (err) {
+    if (status) { status.textContent = '✗ Fehler'; status.className = 'ml-3 text-xs text-red-600'; }
+    if (window.showFlash) showFlash('error', 'Speichern fehlgeschlagen.');
+  }
+}
+
+// Vor dem Einreichen: alle aktuell sichtbaren Werte zwingend an den Server
+// pushen — TEXT, NUMBER, DATE, TEXTAREA, SELECT, RADIO und CHECKBOX-Gruppen.
+// Race-Condition: htmx-PATCH-Calls (z. B. nach SELECT-Change) sind async; ohne
+// dieses Flush kann ein Submit-Call den PATCH überholen und der Server findet
+// den frisch gewählten Wert (noch) nicht in der DB → 422 Pflichtfeld fehlt.
+async function flushPendingFieldEdits(reqId) {
+  // 1. Aktiven Cursor verlassen → triggert blur und damit hx-patch.
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  var csrf = document.querySelector('meta[name="csrf-token"]');
+  var headers = { 'Content-Type': 'application/json' };
+  if (csrf) headers['X-CSRF-Token'] = csrf.content;
+  var jobs = [];
+  var seenKeys = new Set();
+
+  function pushPatch(key, value) {
+    if (!key || seenKeys.has(key)) return;
+    seenKeys.add(key);
+    jobs.push(
+      fetch('/api/v1/requests/' + reqId + '/fields/' + encodeURIComponent(key), {
+        method: 'PATCH',
+        headers: headers,
+        body: JSON.stringify({ value: value || '' }),
+      }).catch(function () { /* nicht kritisch — Submit prüft erneut */ })
+    );
+  }
+
+  // Wir iterieren pro Feld-Container (.autosave-field hat data-field-key).
+  // Für ENUM mit Radio-Cards (Systemkategorie) gibt es keinen autosave-field-
+  // Wrapper, dort fangen wir die Radios separat über data-field-key am Input.
+  document.querySelectorAll('.autosave-field').forEach(function (wrap) {
+    var key = wrap.getAttribute('data-field-key');
+    if (!key) return;
+
+    var checkboxes = wrap.querySelectorAll('input[type=checkbox][data-field-key]');
+    if (checkboxes.length > 0) {
+      var vals = [];
+      wrap.querySelectorAll('input[type=checkbox]:checked').forEach(function (c) {
+        if (c.value) vals.push(c.value);
+      });
+      pushPatch(key, vals.join(','));
+      return;
+    }
+
+    var checkedRadio = wrap.querySelector('input[type=radio]:checked');
+    if (checkedRadio) {
+      pushPatch(key, checkedRadio.value || '');
+      return;
+    }
+
+    var sel = wrap.querySelector('select');
+    if (sel) {
+      pushPatch(key, sel.value || '');
+      return;
+    }
+
+    var simple = wrap.querySelector(
+      'input[type=text], input[type=number], input[type=date], textarea'
+    );
+    if (simple) {
+      pushPatch(key, simple.value || '');
+    }
+  });
+
+  // Radios & Selects, die NICHT von einem .autosave-field umschlossen sind
+  // (z. B. die Radio-Karten für system_category.code in eigener Markup-
+  // Variante). Wir gehen über data-field-key direkt am Input.
+  document.querySelectorAll(
+    'input[type=radio][data-field-key]:checked'
+  ).forEach(function (r) {
+    pushPatch(r.getAttribute('data-field-key'), r.value || '');
+  });
+
+  if (jobs.length) await Promise.all(jobs);
+}
+
+// Hilfsfunktion: nach einem Submit-Fehler die Flash-Meldung sichtbar machen.
+// Wenn der Nutzer von der unteren Aktionsleiste aus eingereicht hat, sieht er
+// die obere Banner-Region nicht — wir scrollen smooth dahin und blenden
+// zusätzlich einen Inline-Hinweis an der unteren Leiste ein.
+function showSubmitError(reqId, message) {
+  showFlash('error', message);
+  // Scroll zum Flash-Container, damit die Fehlermeldung sichtbar wird
+  var flash = document.getElementById('flash-container');
+  if (flash) {
+    flash.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  // Zusätzlich einen kurzen Inline-Hinweis am Footer-Status zeigen
+  var footerStatus = document.getElementById('footer-save-status');
+  if (footerStatus) {
+    footerStatus.textContent = '⚠ Fehler – siehe Meldung oben';
+    footerStatus.className = 'ml-3 text-xs text-red-600 font-semibold';
+    setTimeout(function () { footerStatus.textContent = ''; footerStatus.className = 'ml-3 text-xs text-gray-400'; }, 8000);
+  }
+}
+
+async function submitRequest(reqId) {
   var catD = document.getElementById('confirm-appowner');
   var catD2 = document.getElementById('confirm-itowner');
   if (catD && catD2 && (!catD.checked || !catD2.checked)) {
-    showFlash('error', 'Bitte beide Vier-Augen-Bestätigungen aktivieren.');
+    showSubmitError(reqId, 'Bitte beide Vier-Augen-Bestätigungen aktivieren.');
     return;
   }
+  // KRITISCH: Erst Auto-Save flushen, dann einreichen
+  await flushPendingFieldEdits(reqId);
   var payload = { category_d_confirmed_by: [] };
   fetch('/api/v1/requests/' + reqId + '/submit', {
     method: 'POST',
@@ -359,7 +611,81 @@ function submitRequest(reqId) {
       window.location.href = '/requests?flash=Antrag+eingereicht';
     } else {
       r.json().then(function(d) {
-        showFlash('error', d.detail || 'Fehler beim Einreichen.');
+        showSubmitError(reqId, (window.formatDetail ? formatDetail(d.detail, 'Fehler beim Einreichen.') : (d.detail || 'Fehler beim Einreichen.')));
+      });
+    }
+  });
+}
+
+function withdrawRequest(reqId) {
+  var reason = window.prompt(
+    'Antrag wirklich zurückziehen?\n\nGrund (optional, wird im Verlauf gespeichert):'
+  );
+  if (reason === null) return; // Benutzer hat Abbrechen geklickt
+  fetch('/api/v1/requests/' + reqId + '/withdraw', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+    body: JSON.stringify({ reason: reason }),
+  }).then(function(r) {
+    if (r.ok) {
+      window.location.href = '/requests?flash=Antrag+zur%C3%BCckgezogen';
+    } else {
+      r.json().then(function(d) {
+        showFlash('error', (window.formatDetail ? formatDetail(d.detail, 'Fehler beim Zurückziehen.') : (d.detail || 'Fehler beim Zurückziehen.')));
+      });
+    }
+  });
+}
+
+function promotePoc(reqId) {
+  if (!window.confirm(
+    'POC zu vollwertigem Standard-Antrag promovieren?\n\n' +
+    'Alle bisher eingegebenen Werte werden übernommen. Der neue Antrag startet ' +
+    'als Entwurf, sodass Sie die zusätzlich benötigten Felder (Datenschutz, IT-' +
+    'Sicherheit, Lizenzen, Betrieb) noch ergänzen können, bevor Sie ihn einreichen.\n\n' +
+    'Der ursprüngliche POC bleibt unverändert erhalten.'
+  )) return;
+  fetch('/api/v1/requests/' + reqId + '/promote_to_standard', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+  }).then(function (r) {
+    if (r.ok) {
+      r.json().then(function (j) {
+        window.location.href = '/requests/' + j.id + '?flash=POC+promoviert';
+      });
+    } else {
+      r.json().then(function (d) {
+        showFlash('error', (window.formatDetail ? formatDetail(d.detail, 'Fehler beim Promovieren.') : (d.detail || 'Fehler beim Promovieren.')));
+      });
+    }
+  });
+}
+
+function deleteDraft(reqId) {
+  if (!window.confirm(
+    'Diesen Entwurf wirklich endgültig löschen?\n\n' +
+    'Alle Eingaben gehen unwiderruflich verloren. ' +
+    'Bereits eingereichte Anträge können nicht gelöscht, sondern nur zurückgezogen werden.'
+  )) return;
+  fetch('/api/v1/requests/' + reqId, {
+    method: 'DELETE',
+    headers: {
+      'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+    },
+  }).then(function(r) {
+    if (r.ok) {
+      window.location.href = '/requests?flash=Entwurf+gel%C3%B6scht';
+    } else {
+      r.json().then(function(d) {
+        showFlash('error', (window.formatDetail ? formatDetail(d.detail, 'Fehler beim Löschen.') : (d.detail || 'Fehler beim Löschen.')));
+      }).catch(function() {
+        showFlash('error', 'Fehler beim Löschen.');
       });
     }
   });

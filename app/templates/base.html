@@ -44,7 +44,7 @@
   <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
 
   <!-- Custom CSS -->
-  <link rel="stylesheet" href="/static/app.css" />
+  <link rel="stylesheet" href="/static/app.css?v={{ static_version }}" />
 
   {% block extra_head %}{% endblock %}
 </head>
@@ -76,7 +76,7 @@
   </footer>
 
   <!-- App JS -->
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v={{ static_version }}"></script>
 
   {% block extra_scripts %}{% endblock %}
 </body>

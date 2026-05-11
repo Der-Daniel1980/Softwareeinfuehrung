@@ -85,7 +85,14 @@
             data-status="{{ req.status }}"
             data-category="{{ req.system_category or '' }}"
             data-owner="{{ req.requester_id }}">
-          <td class="px-4 py-3 text-sm font-medium text-gray-900 max-w-xs truncate">{{ req.title }}</td>
+          <td class="px-4 py-3 text-sm font-medium text-gray-900 max-w-xs">
+            <div class="flex items-center gap-2 truncate">
+              {% if req.is_poc %}
+              <span class="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded font-bold flex-shrink-0" title="Proof of Concept">🧪 POC</span>
+              {% endif %}
+              <span class="truncate">{{ req.title }}</span>
+            </div>
+          </td>
           <td class="px-4 py-3 text-sm text-gray-600">{{ req.requester.name if req.requester else '—' }}</td>
           <td class="px-4 py-3">
             {% set status = req.status %}
@@ -113,11 +120,20 @@
             {% if req.status in ['DRAFT', 'CHANGES_REQUESTED'] and req.requester_id == user.id %}
             <a href="/requests/{{ req.id }}" class="text-sm text-indigo-600 hover:underline font-medium mr-3">Bearbeiten</a>
             {% endif %}
+            {% if req.status in ['SUBMITTED', 'IN_REVIEW'] and req.requester_id == user.id %}
+            <a href="/requests/{{ req.id }}" class="text-sm text-indigo-600 hover:underline font-medium mr-3">Bearbeiten</a>
+            {% endif %}
             {% if req.status not in ['DRAFT'] %}
             <a href="/requests/{{ req.id }}/review" class="text-sm text-gray-600 hover:underline">Prüfen</a>
             {% endif %}
             {% if req.status == 'DRAFT' and req.requester_id != user.id %}
             <a href="/requests/{{ req.id }}" class="text-sm text-gray-600 hover:underline">Ansehen</a>
+            {% endif %}
+            {% if req.status == 'DRAFT' and req.requester_id == user.id %}
+            <button type="button"
+                    onclick="window.deleteDraftFromList && window.deleteDraftFromList({{ req.id }}, this)"
+                    class="text-sm text-red-600 hover:underline ml-2"
+                    title="Entwurf endgültig löschen">🗑</button>
             {% endif %}
           </td>
         </tr>
@@ -171,6 +187,32 @@ function resetFilters() {
   if (mineOnly) mineOnly.checked = false;
   applyFilters();
 }
+
+// Inline-Löschen aus der Tabelle. Entfernt nur DRAFT-Zeilen (Server prüft das
+// erneut). Erfolgreiche Antwort blendet die Zeile direkt aus, damit man nicht
+// die ganze Liste neu laden muss.
+window.deleteDraftFromList = function(reqId, btn) {
+  if (!window.confirm(
+    'Entwurf wirklich endgültig löschen?\nAlle Eingaben gehen verloren.'
+  )) return;
+  var csrf = document.querySelector('meta[name="csrf-token"]');
+  fetch('/api/v1/requests/' + reqId, {
+    method: 'DELETE',
+    headers: csrf ? { 'X-CSRF-Token': csrf.content } : {},
+  }).then(function(r) {
+    if (r.ok) {
+      var row = btn.closest('tr');
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+      if (window.showFlash) showFlash('success', 'Entwurf gelöscht.');
+    } else {
+      r.json().then(function(d) {
+        if (window.showFlash) showFlash('error', d.detail || 'Fehler beim Löschen.');
+      }).catch(function() {
+        if (window.showFlash) showFlash('error', 'Fehler beim Löschen.');
+      });
+    }
+  });
+};
 
 // Apply URL params on load
 (function() {

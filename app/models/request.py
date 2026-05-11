@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -51,6 +51,12 @@ class ApplicationRequest(Base):
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # POC-Workflow: vereinfachter Antrag, fragt nur Felder mit
+    # `field_definitions.included_in_poc = 1` ab.
+    is_poc: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    promoted_from_poc_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("application_requests.id"), nullable=True,
+    )
 
     requester: Mapped["User"] = relationship("User", foreign_keys=[requester_id], lazy="selectin")  # noqa: F821
     application_owner: Mapped["User | None"] = relationship(  # noqa: F821

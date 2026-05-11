@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Fragenkatalog{% endblock %}
+
+{% block content %}
+{% set role_codes = user.role_codes() %}
+
+{% if 'ADMIN' not in role_codes %}
+<div class="max-w-xl mx-auto px-4 py-16 text-center">
+  <div class="text-5xl mb-4">🔒</div>
+  <h1 class="text-xl font-bold text-gray-800 mb-2">Kein Zugriff</h1>
+  <p class="text-gray-500">Diese Seite ist nur für Administratoren zugänglich.</p>
+  <a href="/" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">← Zurück zum Dashboard</a>
+</div>
+{% else %}
+
+<div class="max-w-7xl mx-auto px-4 py-8">
+
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Fragenkatalog</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Definiert die Felder, die in jedem Antrag erfasst werden, plus die
+        Verantwortlichkeiten je Rolle (Info / Freigabe).
+      </p>
+    </div>
+    <a href="/admin/fields/new"
+       class="inline-flex items-center gap-2 bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors">
+      + Neue Frage
+    </a>
+  </div>
+
+  {# Gruppieren nach Section in der angezeigten Reihenfolge. #}
+  {% set sections = {} %}
+  {% set order = [] %}
+  {% for f in fields %}
+    {% if f.section not in sections %}
+      {% set _ = order.append(f.section) %}
+      {% set _ = sections.update({f.section: []}) %}
+    {% endif %}
+    {% set _ = sections[f.section].append(f) %}
+  {% endfor %}
+
+  <div class="space-y-6">
+    {% for sec in order %}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">{{ sec }}</h2>
+        <span class="text-xs text-gray-400">{{ sections[sec] | length }} Frage(n)</span>
+      </div>
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Sort</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Label</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Key</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Typ</th>
+            <th class="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase">Pflicht</th>
+            <th class="px-4 py-2 text-center text-[11px] font-semibold text-gray-500 uppercase" title="Im POC-Workflow benötigt?">POC</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Bedingt</th>
+            <th class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase">Verantwortlichkeiten</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for f in sections[sec] %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 text-xs text-gray-500">{{ f.sort_order }}</td>
+            <td class="px-4 py-2 text-sm font-medium text-gray-800">{{ f.label }}</td>
+            <td class="px-4 py-2 text-xs font-mono text-gray-500">{{ f.key }}</td>
+            <td class="px-4 py-2 text-xs text-gray-600">{{ f.input_type }}</td>
+            <td class="px-4 py-2 text-center">
+              {% if f.is_required %}
+              <span class="text-red-500 font-bold">*</span>
+              {% else %}
+              <span class="text-gray-300">–</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-center">
+              {% if f.included_in_poc %}
+              <span class="text-amber-600" title="Im POC-Workflow">🧪</span>
+              {% else %}
+              <span class="text-gray-300">–</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-2 text-xs text-gray-500">
+              {% if f.conditional_on_key %}
+              wenn <code>{{ f.conditional_on_key }}</code> = "{{ f.conditional_equals }}"
+              {% else %}<span class="text-gray-300">–</span>{% endif %}
+            </td>
+            <td class="px-4 py-2">
+              <div class="flex flex-wrap gap-1">
+                {% set approvers = f.responsibilities | selectattr('kind', 'equalto', 'APPROVAL') | list %}
+                {% set infos = f.responsibilities | selectattr('kind', 'equalto', 'INFO') | list %}
+                {% for r in approvers %}
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold" title="Freigabe">
+                  ✓ {{ r.role.code }}
+                </span>
+                {% endfor %}
+                {% for r in infos %}
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200" title="Info">
+                  i {{ r.role.code }}
+                </span>
+                {% endfor %}
+                {% if not approvers and not infos %}
+                <span class="text-[10px] text-gray-300 italic">keine</span>
+                {% endif %}
+              </div>
+            </td>
+            <td class="px-4 py-2 text-right whitespace-nowrap">
+              <a href="/admin/fields/{{ f.id }}"
+                 class="text-xs text-indigo-600 hover:underline mr-2">Bearbeiten</a>
+              <form method="post" action="/admin/fields/{{ f.id }}/delete" class="inline"
+                    onsubmit="return confirm('Frage „{{ f.label }}“ wirklich löschen?\nNur möglich, wenn sie noch nirgends ausgefüllt wurde.')">
+                <button type="submit" class="text-xs text-red-600 hover:underline">Löschen</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if not fields %}
+  <div class="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
+    <div class="text-4xl mb-3">📋</div>
+    <p>Noch keine Fragen angelegt.</p>
+    <a href="/admin/fields/new" class="mt-4 inline-block text-sm text-indigo-600 hover:underline">Erste Frage anlegen →</a>
+  </div>
+  {% endif %}
+
+</div>
+{% endif %}
+{% endblock %}

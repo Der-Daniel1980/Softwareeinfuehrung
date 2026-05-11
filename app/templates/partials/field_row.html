@@ -36,6 +36,12 @@
         {# Wrap in autosave container #}
         <div class="autosave-field" data-field-key="{{ fkey }}">
 
+          {# WICHTIG: hx-trigger braucht mehrere Events für robustes Auto-Save:
+             - "input changed delay:800ms"  → speichert während des Tippens (debounced)
+             - "blur"                        → sichert beim Verlassen des Felds
+             - "change"                      → sichert bei programmatischer Änderung
+             So gehen Werte nicht verloren, wenn Nutzer direkt auf „Einreichen"
+             klickt. Zusätzlich serialisiert submitRequest() vorab alle Edits. #}
           {% if field.input_type == 'TEXT' %}
           <input
             type="text"
@@ -44,7 +50,7 @@
             value="{{ current_val }}"
             data-field-key="{{ fkey }}"
             hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
-            hx-trigger="blur"
+            hx-trigger="input changed delay:800ms, blur, change"
             hx-vals='js:{value: event.target.value}'
             hx-swap="none"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
@@ -57,7 +63,7 @@
             rows="4"
             data-field-key="{{ fkey }}"
             hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
-            hx-trigger="blur"
+            hx-trigger="input changed delay:1.2s, blur, change"
             hx-vals='js:{value: event.target.value}'
             hx-swap="none"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 resize-y"
@@ -71,7 +77,7 @@
             value="{{ current_val }}"
             data-field-key="{{ fkey }}"
             hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
-            hx-trigger="blur, change"
+            hx-trigger="change, blur"
             hx-vals='js:{value: event.target.value}'
             hx-swap="none"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -85,7 +91,7 @@
             value="{{ current_val }}"
             data-field-key="{{ fkey }}"
             hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
-            hx-trigger="blur"
+            hx-trigger="input changed delay:800ms, blur, change"
             hx-vals='js:{value: event.target.value}'
             hx-swap="none"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -179,7 +185,7 @@
             autocomplete="off"
             data-field-key="{{ fkey }}"
             hx-patch="/api/v1/requests/{{ req.id }}/fields/{{ fkey }}"
-            hx-trigger="blur, change"
+            hx-trigger="input changed delay:800ms, blur, change"
             hx-vals='js:{value: event.target.value}'
             hx-swap="none"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
@@ -382,11 +388,13 @@
            If no decision exists yet → "OFFEN" so the requester knows who is
            still expected to act. If a decision exists → status badge plus the
            full Rückfrage comment. #}
+        {% set is_requester_view = ('REQUESTER' in role_codes and req.requester_id == user.id) %}
         {% for resp in field.responsibilities if resp.kind == 'APPROVAL' %}
         {% set dec_key = (fkey, resp.role_id) %}
         {% set dec = decisions.get(dec_key) if decisions is defined else None %}
-        <div class="text-xs bg-gray-50 border border-gray-200 rounded p-2">
-          <div class="flex items-center gap-2 mb-1">
+        {% set has_open_question = dec and dec.comment and dec.status == 'IN_REVIEW' %}
+        <div class="text-xs {% if has_open_question %}bg-amber-50 border-amber-300{% else %}bg-gray-50 border-gray-200{% endif %} border rounded p-2">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
             <span class="text-gray-500 font-semibold">{{ resp.role.code }}:</span>
             {% if dec %}
               {% set status = dec.status %}
@@ -400,8 +408,17 @@
           </div>
           {% if dec and dec.comment %}
           <div class="text-gray-700 leading-snug whitespace-pre-wrap pt-1 border-t border-gray-200">
-            <span class="text-gray-400">💬 Rückfrage:</span> {{ dec.comment }}
+            <span class="text-amber-600 font-semibold">💬 Rückfrage:</span> {{ dec.comment }}
           </div>
+          {% if has_open_question and is_requester_view %}
+          <button
+            type="button"
+            onclick="openFieldThread('{{ fkey_safe }}')"
+            class="mt-2 w-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-semibold py-1.5 px-2 rounded transition-colors flex items-center justify-center gap-1"
+          >
+            ↩ Auf Rückfrage antworten
+          </button>
+          {% endif %}
           {% endif %}
         </div>
         {% endfor %}
@@ -422,13 +439,35 @@
      Q&A on this specific field. Anyone who can view the request can read
      the thread; anyone who can view can also post (the API enforces role
      impersonation rules). The thread sits below the field row spanning
-     both columns so it's clearly attached to *this* field's content. #}
+     both columns so it's clearly attached to *this* field's content.
+
+     Wir spiegeln zusätzlich Rückfragen aus ApprovalDecision.comment als
+     synthetische erste Nachrichten in den Thread, damit der Antragsteller
+     den Gesprächsfaden in EINEM Block sieht und sofort weiß, *wer* gefragt
+     hat. So entfällt das versteckte „nur Decision-Kommentar im rechten
+     Status-Block" das vorher zu verwaisten Rückfragen geführt hat. #}
   {% set field_comments = comments_by_field.get(fkey, []) if comments_by_field is defined else [] %}
-  <div class="mt-3 ml-1 border-l-2 {% if field_comments %}border-indigo-200{% else %}border-gray-200{% endif %} pl-3">
-    <details {% if field_comments %}open{% endif %} class="text-xs">
+  {% set pending_decision_questions = [] %}
+  {% for resp in field.responsibilities if resp.kind == 'APPROVAL' %}
+    {% set dec_key2 = (fkey, resp.role_id) %}
+    {% set dec2 = decisions.get(dec_key2) if decisions is defined else None %}
+    {% if dec2 and dec2.comment and dec2.status == 'IN_REVIEW' %}
+      {# Side-effect append via Jinja list mutation #}
+      {% set _ = pending_decision_questions.append({'role': resp.role, 'dec': dec2}) %}
+    {% endif %}
+  {% endfor %}
+  {% set has_any_thread_activity = field_comments or pending_decision_questions %}
+  {% set should_open_thread = has_any_thread_activity %}
+  <div
+    id="thread-{{ fkey_safe }}"
+    class="mt-3 ml-1 border-l-2 {% if pending_decision_questions %}border-amber-300{% elif field_comments %}border-indigo-200{% else %}border-gray-200{% endif %} pl-3"
+  >
+    <details {% if should_open_thread %}open{% endif %} class="text-xs">
       <summary class="cursor-pointer select-none text-gray-600 hover:text-indigo-600 inline-flex items-center gap-1.5">
         💬
-        {% if field_comments %}
+        {% if pending_decision_questions %}
+          <span class="font-semibold text-amber-700">Offene Rückfrage{{ 'n' if pending_decision_questions|length > 1 else '' }} ({{ pending_decision_questions|length + field_comments|length }})</span>
+        {% elif field_comments %}
           <span class="font-semibold text-indigo-700">Rückfragen &amp; Antworten ({{ field_comments|length }})</span>
         {% else %}
           <span class="text-gray-400">Rückfrage stellen / kommentieren</span>
@@ -436,6 +475,24 @@
       </summary>
 
       <div class="mt-2 space-y-2">
+        {# Synthetische Decision-Rückfragen als erste Bubbles im Thread.
+           Quelle = ApprovalDecision.comment + role. Werden NICHT in der
+           Comment-Tabelle gespeichert; sie spiegeln nur was der Reviewer im
+           Entscheidungs-Formular eingetragen hat. #}
+        {% for q in pending_decision_questions %}
+        <div class="flex gap-2">
+          <div class="max-w-[80%] bg-amber-50 border-amber-300 text-amber-900 border rounded-lg p-2">
+            <div class="flex items-center gap-2 text-[10px] mb-1">
+              <span class="font-bold">{{ q.dec.decider.name if q.dec.decider else q.role.code }}</span>
+              <span class="px-1.5 py-0.5 rounded bg-white/60 font-semibold tracking-tight">{{ q.role.code }}</span>
+              <span class="opacity-60">{{ q.dec.decided_at.strftime('%d.%m.%Y %H:%M') if q.dec.decided_at else '' }}</span>
+              <span class="px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-semibold tracking-tight text-[9px]">RÜCKFRAGE</span>
+            </div>
+            <div class="whitespace-pre-wrap leading-snug">{{ q.dec.comment }}</div>
+          </div>
+        </div>
+        {% endfor %}
+
         {% for c in field_comments %}
           {% set is_requester = c.author and c.author.id == req.requester_id %}
           {% set role_chip = c.role.code if c.role else (c.author.roles[0].code if c.author and c.author.roles else '') %}
@@ -453,6 +510,15 @@
         </div>
         {% endfor %}
 
+        {# Hinweis nach erfolgter Antwort: der Status bleibt absichtlich
+           IN_REVIEW bis der Reviewer die Antwort gesichtet hat. Sonst
+           würde eine Antwort den Status fälschlich auf „erledigt" setzen. #}
+        {% if pending_decision_questions and field_comments %}
+        <div class="text-[10px] text-gray-500 italic px-1 py-1">
+          ℹ Antwort gesendet — der Reviewer prüft und schließt die Rückfrage anschließend ab.
+        </div>
+        {% endif %}
+
         {# Compose box – posts to the API. Optional role attribution
            defaults to the user's first reviewer role so the chip on the
            comment matches what the requester expects. #}
@@ -460,15 +526,17 @@
         {% for r in user.roles if r.code in ['BETRIEBSRAT','IT_SECURITY','DATA_PROTECTION','APP_MANAGER','APP_OPERATION','LICENSE_MGMT'] and not first_reviewer_role %}
           {% set first_reviewer_role = r %}
         {% endfor %}
+        {% set is_requester_view2 = ('REQUESTER' in role_codes and req.requester_id == user.id) %}
         <form
           class="flex flex-col gap-1.5 mt-2"
           onsubmit="return submitComment(event, this, '{{ req.id }}', '{{ fkey }}', '{{ fkey_safe }}')"
         >
           <textarea
+            id="reply-{{ fkey_safe }}"
             name="body"
             rows="2"
-            placeholder="{% if 'REQUESTER' in role_codes and req.requester_id == user.id %}Antwort auf Rückfrage / Kommentar zum Feld …{% else %}Rückfrage an den Antragsteller / Kommentar zum Feld …{% endif %}"
-            class="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
+            placeholder="{% if is_requester_view2 and pending_decision_questions %}Antwort auf die Rückfrage eingeben …{% elif is_requester_view2 %}Antwort auf Rückfrage / Kommentar zum Feld …{% else %}Rückfrage an den Antragsteller / Kommentar zum Feld …{% endif %}"
+            class="w-full px-2 py-1.5 border {% if is_requester_view2 and pending_decision_questions %}border-amber-400 ring-1 ring-amber-200{% else %}border-gray-300{% endif %} rounded text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
           ></textarea>
           {% if first_reviewer_role %}
           <input type="hidden" name="role_id" value="{{ first_reviewer_role.id }}" />
@@ -476,7 +544,7 @@
           <div class="flex justify-end">
             <button
               type="submit"
-              class="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium py-1 px-3 rounded transition-colors"
+              class="{% if is_requester_view2 and pending_decision_questions %}bg-amber-600 hover:bg-amber-700{% else %}bg-indigo-600 hover:bg-indigo-700{% endif %} text-white text-[11px] font-medium py-1 px-3 rounded transition-colors"
             >Senden</button>
           </div>
         </form>

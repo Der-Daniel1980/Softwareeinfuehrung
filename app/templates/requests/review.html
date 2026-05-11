@@ -65,15 +65,21 @@
             {% set ns = namespace(my_open=0, my_done=0, my_rejected=0, total_my=0, filled=0, total=0) %}
             {% for item in sec.fields %}
               {% set f = item.field %}
-              {% set ns.total = ns.total + 1 %}
-              {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
-              {% for resp in f.responsibilities if resp.kind == 'APPROVAL' and resp.role.code in role_codes %}
-                {% set ns.total_my = ns.total_my + 1 %}
-                {% set d = decisions.get((f.key, resp.role_id)) %}
-                {% if d and d.status == 'APPROVED' %}{% set ns.my_done = ns.my_done + 1 %}
-                {% elif d and d.status == 'REJECTED' %}{% set ns.my_rejected = ns.my_rejected + 1 %}
-                {% else %}{% set ns.my_open = ns.my_open + 1 %}{% endif %}
-              {% endfor %}
+              {# Bedingte Felder, deren Auslöser nicht den geforderten Wert hat,
+                 sind im UI ausgeblendet und dürfen nicht in die Section-Zähler
+                 (z. B. „1 offen") eingehen. #}
+              {% set _cond_active = (not f.conditional_on_key) or (field_values.get(f.conditional_on_key) == f.conditional_equals) %}
+              {% if _cond_active %}
+                {% set ns.total = ns.total + 1 %}
+                {% if field_values.get(f.key) %}{% set ns.filled = ns.filled + 1 %}{% endif %}
+                {% for resp in f.responsibilities if resp.kind == 'APPROVAL' and resp.role.code in role_codes %}
+                  {% set ns.total_my = ns.total_my + 1 %}
+                  {% set d = decisions.get((f.key, resp.role_id)) %}
+                  {% if d and d.status == 'APPROVED' %}{% set ns.my_done = ns.my_done + 1 %}
+                  {% elif d and d.status == 'REJECTED' %}{% set ns.my_rejected = ns.my_rejected + 1 %}
+                  {% else %}{% set ns.my_open = ns.my_open + 1 %}{% endif %}
+                {% endfor %}
+              {% endif %}
             {% endfor %}
             {% if ns.my_rejected > 0 %}
               {% set dot = 'bg-red-500' %}{% set badge_cls = 'bg-red-100 text-red-700' %}{% set badge_txt = ns.my_rejected ~ ' ABL.' %}

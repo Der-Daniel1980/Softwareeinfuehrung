@@ -146,6 +146,15 @@ async def patch_field(
         )
         db.add(fv)
 
+    # WICHTIG: Einige Felder doppeln sich zwischen `field_values` (generisch)
+    # und einer Spalte auf `application_requests` (strukturell). Beispiel:
+    # `system_category.code` ↔ `application_requests.system_category`. Das
+    # Submit-Validation (category_logic) prüft die Spalte; ohne Mirror würde
+    # der Antrag mit „Systemkategorie muss gesetzt sein" abgelehnt, obwohl der
+    # Nutzer die Kategorie längst ausgewählt hat. Wir spiegeln deshalb hier
+    # zentral. Owner-Picklists werden gegen die User-Tabelle aufgelöst.
+    _mirror_to_request_columns(db, req, key, body.value)
+
     db.flush()
     revisions.record_field_change(
         db, req, key, old_val, body.value, user,
@@ -156,6 +165,41 @@ async def patch_field(
     db.commit()
     db.refresh(req)
     return _to_read(req)
+
+
+def _mirror_to_request_columns(
+    db: Session, req: ApplicationRequest, key: str, value: str | None,
+) -> None:
+    """Spiegelt strukturelle Felder vom field_values-Bag in die Spalten."""
+    if key == "system_category.code":
+        # ENUM ['A','B','C','D'] → Spalte
+        req.system_category = (value or None)
+        return
+    if key == "stammdaten.short_description":
+        req.short_description = (value or None)
+        return
+    if key == "stammdaten.installation_location":
+        req.installation_location = (value or None)
+        return
+    if key in ("stammdaten.application_owner", "stammdaten.it_application_owner"):
+        # Picklist liefert i.d.R. den Anzeigenamen (z. B. „Anna App-Mgr"),
+        # alternativ die E-Mail. Wir matchen beides, damit auch eingetippte
+        # Werte korrekt aufgelöst werden.
+        target_id: int | None = None
+        if value:
+            from app.models import User as _User
+            v = value.strip()
+            user_row = (
+                db.query(_User)
+                .filter((_User.email == v) | (_User.name == v))
+                .first()
+            )
+            if user_row:
+                target_id = user_row.id
+        if key == "stammdaten.application_owner":
+            req.application_owner_id = target_id
+        else:
+            req.it_application_owner_id = target_id
 
 
 @router.post("/{req_id}/submit", response_model=RequestRead,
@@ -192,6 +236,68 @@ def resubmit_request(
     db.commit()
     db.refresh(req)
     return _to_read(req)
+
+
+@router.post("/{req_id}/withdraw", response_model=RequestRead,
+             dependencies=[Depends(verify_api_csrf)])
+async def withdraw_request(
+    req_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RequestRead:
+    """Antrag zurückziehen (Status -> WITHDRAWN). Akzeptiert JSON oder Form."""
+    ct = (request.headers.get("content-type") or "").lower()
+    reason: str | None = None
+    if ct.startswith("application/json"):
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            reason = (data.get("reason") or "").strip() or None
+    else:
+        try:
+            form = await request.form()
+            raw = form.get("reason")
+            reason = (str(raw).strip() if raw else None) or None
+        except Exception:
+            reason = None
+
+    req = _get_req_or_404(db, req_id)
+    workflow.withdraw(db, req, user, reason=reason)
+    db.commit()
+    db.refresh(req)
+    return _to_read(req)
+
+
+@router.delete("/{req_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(verify_api_csrf)])
+def delete_request(
+    req_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Entwurf löschen — nur DRAFT, nur eigener Antrag (oder ADMIN)."""
+    req = _get_req_or_404(db, req_id)
+    workflow.delete_draft(db, req, user)
+    db.commit()
+    return None
+
+
+@router.post("/{req_id}/promote_to_standard", response_model=RequestRead,
+             dependencies=[Depends(verify_api_csrf)])
+def promote_to_standard(
+    req_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RequestRead:
+    """POC -> Standard-Antrag promovieren. Liefert den NEUEN Antrag zurück."""
+    poc = _get_req_or_404(db, req_id)
+    new_req = workflow.promote_poc_to_standard(db, poc, user)
+    db.commit()
+    db.refresh(new_req)
+    return _to_read(new_req)
 
 
 _MAX_ATTACHMENTS_PER_REQUEST = 20

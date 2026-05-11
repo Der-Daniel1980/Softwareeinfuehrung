@@ -37,20 +37,30 @@ def role_progress(session: Session, req: ApplicationRequest) -> list[dict]:
             "open_questions": 1,   # rejected + in_review w/ comment
         }
     """
-    # All approval-responsibilities once
-    rows = (
+    # All approval-responsibilities once. We also pull the conditional info
+    # so we can skip fields whose trigger value isn't set (e.g.
+    # `system_category.justification` only fires when category == "D").
+    q = (
         session.query(
             FieldResponsibility.role_id,
             Role.code,
             Role.label,
             FieldDefinition.key,
             FieldDefinition.label,
+            FieldDefinition.conditional_on_key,
+            FieldDefinition.conditional_equals,
         )
         .join(Role, Role.id == FieldResponsibility.role_id)
         .join(FieldDefinition, FieldDefinition.id == FieldResponsibility.field_id)
         .filter(FieldResponsibility.kind == Responsibility.APPROVAL.value)
-        .all()
     )
+    if getattr(req, "is_poc", False):
+        # POC-Modus: nur Felder, die explizit für den POC-Workflow markiert sind.
+        q = q.filter(FieldDefinition.included_in_poc.is_(True))
+    rows = q.all()
+
+    # Map of current field values for this request — used for conditional check.
+    field_values = {fv.field_key: fv.value_text for fv in req.field_values}
 
     # Existing decisions for this request, keyed by (field_key, role_id)
     decisions = {
@@ -61,7 +71,19 @@ def role_progress(session: Session, req: ApplicationRequest) -> list[dict]:
     }
 
     by_role: dict[str, dict] = {}
-    for role_id, code, role_label, field_key, field_label in rows:
+    for (
+        role_id,
+        code,
+        role_label,
+        field_key,
+        field_label,
+        cond_key,
+        cond_equals,
+    ) in rows:
+        # Skip fields whose conditional trigger isn't satisfied — they aren't
+        # rendered in the UI and shouldn't show up as "open" decisions.
+        if cond_key and field_values.get(cond_key) != cond_equals:
+            continue
         slot = by_role.setdefault(
             code,
             {
