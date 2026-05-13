@@ -1,0 +1,52 @@
+Zeile;Antwort
+2;Daniel Hufnagel
+3;daniel.hufnagel@amedes-group.com
+4;IT Application Management
+5;amedes (Eigenentwicklung)
+6;SysIntro
+7;1.0
+8;"Web-Plattform zur digitalen Erfassung & Freigabe von Software-Einführungsanträgen; ersetzt Excel/E-Mail durch pro-Feld-Rollenfreigabe mit Audit-Trail."
+9;Q3 2026 (POC seit Q1 2026 produktiv)
+10;"Zentrale Web-Anwendung im amedes-RZ Frankfurt; alle amedes-Standorte greifen über Browser zu (HTTPS)."
+11;"Nein. Marktanalyse ergab kein Produkt mit pro-Feld-Rollenfreigabe + Audit-Trail; daher Eigenentwicklung amedes IT."
+12;"Ja. Name, dienstliche E-Mail und Rolle der Antragsteller/Reviewer (Quelle: Keycloak, JIT-Sync)."
+13;IT Application Management (Leitung). Stellvertretung gemäß amedes-Vertretungsplan.
+14;"Erfassung & Freigabe-Workflow für neu einzuführende Software. Bisher Excel + E-Mail-Abstimmung -> künftig zentrale Plattform mit pro-Feld-Reviews, Statusmaschine und Audit-Trail."
+15;"ca. 30 Reviewer (Betriebsrat, IT-Security, Datenschutz, App-Manager, App-Betrieb, Lizenzen) + bis zu 200 Antragsteller aus der amedes-Gruppe. Admins: 3 (IT Application Management)."
+16;"Mitarbeiter (Antragsteller, Reviewer, Application Owner). Keine Patientendaten, keine externen Personen."
+17;"Digitale, transparente Antragsstellung; weniger Excel/E-Mail; vollständige Nachvollziehbarkeit aller Entscheidungen; Reviewer sehen präzise ihre Zuständigkeit."
+18;"Ja. Rollenbasierte Zugriffsrechte (RBAC) über Keycloak Realm-Rollen, in SysIntro auf REQUESTER/BR/IT_SECURITY/DATA_PROTECTION/APP_MANAGER/APP_OPERATION/LICENSE_MGMT/ADMIN gemappt. JIT-Sync, kein lokales Passwort."
+19;"Inline-Hilfetexte je Feld in der Anwendung; ca. 30 Min. Onboarding-Session pro Reviewer-Rolle vor Go-Live. Benutzerhandbuch im amedes-Wiki."
+20;Ja
+21;"Nein. Audit-Log dokumentiert ausschließlich Antrags- und Freigabe-Ereignisse, keine Verhaltens- oder Leistungsdaten der Mitarbeiter. Zugriff auf Audit-Log nur für ADMIN-Rolle."
+22;"Identifikation des Antragstellers, Zuordnung der Reviewer-Verantwortlichkeit, Nachvollziehbarkeit von Freigabe-Entscheidungen."
+23;"Antragsdaten: 10 Jahre nach Abschluss (Aufbewahrungspflicht IT-Akten). User-Stammdaten: aus Keycloak (JIT) - Lebenszyklus folgt amedes-IdM beim Austritt."
+24;"Keycloak (OIDC, Authentifizierung + Rollen). SMTP-Relay (Benachrichtigungs-Mails an Antragsteller/Reviewer). Datenbank PostgreSQL ist intern, keine externe Schnittstelle."
+25;Echtzeit (OIDC bei Login, SMTP bei Workflow-Trigger).
+26;"n. a. (ausschließlich Echtzeit, keine periodischen Schnittstellen)"
+27;Verwaltung von Software-Einführungsanträgen der amedes-Gruppe
+28;Art. 6 Abs. 1 lit. f DSGVO - berechtigtes Interesse an einem geordneten, auditierbaren IT-Einführungsprozess inkl. BR-Beteiligung.
+29;"Mitarbeiter (Antragsteller, Reviewer, Application Owner)."
+30;"Name, dienstliche E-Mail, Rolle/Abteilung, Antragsinhalte, Freigabe-Entscheidungen je Rolle mit Zeitstempel."
+31;"Keine externen Empfänger. Intern: jeweilige Reviewer-Rollen je nach Feld-Zuständigkeit (BR, IT-Sec, DSB, AppMgr, Ops, Lic)."
+32;"Nein. Hosting ausschließlich in EU (PostgreSQL und Anwendung im amedes-Rechenzentrum Frankfurt). Keycloak ebenfalls amedes-intern."
+33;"Antragsdaten + Audit-Log: 10 Jahre nach Abschluss (append-only). Attachments: mit Antrag. User-Stammdaten: aus Keycloak (JIT), kein separater Lebenszyklus in SysIntro."
+34;"Keine. Eigenentwicklung amedes. Eingesetzte Open-Source-Komponenten (FastAPI, PostgreSQL, Keycloak, nginx) unter freien Lizenzen (BSD/MIT/PostgreSQL/Apache 2.0)."
+35;n. a. Eigenentwicklung. Wartung & Weiterentwicklung durch amedes IT Application Management. OSS-Komponenten via aktive Community-Support-Kanäle.
+36;Ja. amedes IT Application Management (1st & 2nd Level Support) über Ticket-System.
+37;"Vollumfänglich: Patching, Monitoring, tägliches Backup (pg_dump), Release-Deployments, PostgreSQL-DBA, TLS-Zertifikate, Logs. Alles durch amedes IT."
+38;"Nein. On-Prem im amedes-Rechenzentrum Frankfurt. Vorgelagert: nginx + Cloudflare nur als TLS-/DDoS-Schicht ohne Datenhaltung."
+39;n. a. (On-Prem amedes-RZ Frankfurt)
+40;n. a. (On-Prem). Datenexport jederzeit via pg_dump (SQL) oder JSON-Export der Anträge möglich.
+41;n. a. SSO über amedes-Keycloak (kein lokales Passwort in SysIntro). Anwendungs-Secrets im amedes-Vault.
+42;"Mo-Fr 7:00-19:00 Uhr; Wartungsfenster So 02:00-06:00 Uhr."
+43;Mo-Fr 8:00-17:00 Uhr durch amedes IT Application Management.
+44;4 Stunden innerhalb des Supportzeitraums.
+45;n. a. (Eigenentwicklung, keine externen SLA). OSS-Komponenten ohne Hersteller-SLA.
+46;16 Stunden innerhalb des Supportzeitraums.
+47;4 Stunden.
+48;24 Stunden (täglicher pg_dump nach S3 + WAL-Archivierung für Point-in-Time-Recovery).
+49;"Anträge + Audit-Log: 10 Jahre. Attachments (BV, Verträge): mit dem Antrag. Stammdaten (Rollen, Vendoren): unbefristet."
+50;"CAPEX: gering. Interne Entwicklungsaufwände im laufenden IT-Budget enthalten (keine externen Lizenz- oder Hardware-Kosten)."
+51;"OPEX: Hosting (amedes-RZ), Backup (S3), Keycloak-Anteil und Wartung im laufenden IT-Budget enthalten."
+52;"Eigenentwicklung amedes IT Application Management. POC seit Q1 2026 produktiv. Vollständiger Go-Live Q3 2026 (Keycloak-Anbindung + PostgreSQL-Migration in Vorbereitung, siehe docs/GOLIVE.md)."
